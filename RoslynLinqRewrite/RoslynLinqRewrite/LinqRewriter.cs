@@ -1,17 +1,25 @@
 ﻿using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CodeActions;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
+using Microsoft.CodeAnalysis.Options;
+using Microsoft.CodeAnalysis.Rename;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace RoslynLinqRewrite
 {
     internal class LinqRewriter : CSharpSyntaxRewriter
     {
         private SemanticModel semantic;
-        public LinqRewriter(SemanticModel semantic)
+
+        private Project project;
+        public LinqRewriter(Project project, SemanticModel semantic)
         {
+            this.project = project;
             this.semantic = semantic;
         }
 
@@ -36,13 +44,13 @@ namespace RoslynLinqRewrite
 
                 if (symbol.ContainingType.ToString() == "System.Linq.Enumerable")
                 {
-                    var lambda = node.ArgumentList.Arguments.FirstOrDefault()?.Expression as LambdaExpressionSyntax;
-                    var arg = (lambda as SimpleLambdaExpressionSyntax)?.Parameter ?? (lambda as ParenthesizedLambdaExpressionSyntax)?.ParameterList.Parameters.FirstOrDefault();
+                    //var lambda = node.ArgumentList.Arguments.FirstOrDefault()?.Expression as LambdaExpressionSyntax;
+                    //var arg = (lambda as SimpleLambdaExpressionSyntax)?.Parameter ?? (lambda as ParenthesizedLambdaExpressionSyntax)?.ParameterList.Parameters.FirstOrDefault();
                     var collection = ((MemberAccessExpressionSyntax)node.Expression).Expression;
                     var collectionType = semantic.GetTypeInfo(collection).Type;
 
                     var itemType = collectionType is IArrayTypeSymbol ? ((IArrayTypeSymbol)collectionType).ElementType : collectionType.AllInterfaces.Concat(new[] { collectionType }).OfType<INamedTypeSymbol>().First(x => x.IsGenericType && x.ConstructUnboundGenericType().ToString() == "System.Collections.Generic.IEnumerable<>").TypeArguments.First();
-                    var dataFlow = lambda != null ? semantic.AnalyzeDataFlow(lambda.Body) : null;
+                    var dataFlow = semantic.AnalyzeDataFlow(node);
                     var chain = new List<InvocationExpressionSyntax>();
                     chain.Add(node);
                     var c = node;
@@ -52,6 +60,8 @@ namespace RoslynLinqRewrite
                         if (c != null) chain.Add(c);
                         else break;
                     }
+
+
                     var methodNames = Enumerable.Range(0, 5).Select(x => x < chain.Count ? GetMethodFullName(chain[x]) : null).ToList();
                     IsMethodSequenceDelegate IsMethodSequence = (p0, p1, p2, p3, p4, p5) =>
                     {
@@ -67,27 +77,57 @@ namespace RoslynLinqRewrite
                     currentFlow = dataFlow?.Captured.Select(x => new VariableCapture(x, dataFlow.WrittenInside.Contains(x))) ?? Enumerable.Empty<VariableCapture>();
 
 
-                    
+
+
+
+                    if (new[] { SumIntsMethod, SumWithSelectorMethod, AnyWithConditionMethod }.Contains(methodNames[0]))
+                    {
+                        if (methodNames[0] == SumIntsMethod)
+                        {
+                            return RewriteAsLoop(
+                                CreatePrimitiveType(SyntaxKind.IntKeyword),
+                                new[] { CreateLocalVariableDeclaration("sum_", SyntaxFactory.LiteralExpression(SyntaxKind.NumericLiteralExpression, SyntaxFactory.Literal(0))) },
+                                arguments =>
+                                {
+
+                                    return CreateProcessingStep(chain, chain.Count - 1, itemType, ItemName, arguments,
+                                        x => SyntaxFactory.ExpressionStatement(SyntaxFactory.AssignmentExpression(SyntaxKind.AddAssignmentExpression, SyntaxFactory.IdentifierName("sum_"), x))
+                                        );
+
+
+                                },
+                                new[] { SyntaxFactory.ReturnStatement(SyntaxFactory.IdentifierName("sum_")) },
+                                collection
+                            );
+                        }
+                    }
+                    else
+                    {
+
+                    }
+
+#if false
+
 
                     if (IsMethodSequence(SumWithSelectorMethod, WhereMethod))
                     {
                         string itemArg = null;
                         return RewriteAsLoop(
-                CreatePrimitiveType(SyntaxKind.IntKeyword),
-                new[] { CreateLocalVariableDeclaration("sum_", SyntaxFactory.LiteralExpression(SyntaxKind.NumericLiteralExpression, SyntaxFactory.Literal(0))) },
-                arguments =>
-                {
-                    return SyntaxFactory.IfStatement(
-                    InlineOrCreateMethod((CSharpSyntaxNode)Visit(lambda.Body), arguments, CreateParameter(arg.Identifier, itemType), out itemArg),
-                    SyntaxFactory.ExpressionStatement(SyntaxFactory.AssignmentExpression(SyntaxKind.AddAssignmentExpression, SyntaxFactory.IdentifierName("sum_"),
-                         InlineOrCreateMethod((CSharpSyntaxNode)Visit(lambda.Body), arguments, CreateParameter(arg.Identifier, itemType), out itemArg)))
-                         );
+                            CreatePrimitiveType(SyntaxKind.IntKeyword),
+                            new[] { CreateLocalVariableDeclaration("sum_", SyntaxFactory.LiteralExpression(SyntaxKind.NumericLiteralExpression, SyntaxFactory.Literal(0))) },
+                            arguments =>
+                            {
+                                return SyntaxFactory.IfStatement(
+                                InlineOrCreateMethod((CSharpSyntaxNode)Visit(lambda.Body), arguments, CreateParameter(arg.Identifier, itemType), out itemArg),
+                                SyntaxFactory.ExpressionStatement(SyntaxFactory.AssignmentExpression(SyntaxKind.AddAssignmentExpression, SyntaxFactory.IdentifierName("sum_"),
+                                     InlineOrCreateMethod((CSharpSyntaxNode)Visit(lambda.Body), arguments, CreateParameter(arg.Identifier, itemType), out itemArg)))
+                                     );
 
-                },
-                new[] { SyntaxFactory.ReturnStatement(SyntaxFactory.IdentifierName("sum_")) },
-                () => itemArg,
-                collection
-            );
+                            },
+                            new[] { SyntaxFactory.ReturnStatement(SyntaxFactory.IdentifierName("sum_")) },
+                            () => itemArg,
+                            collection
+                        );
 
                     }
 
@@ -177,17 +217,101 @@ namespace RoslynLinqRewrite
                             collection
                         );
                     }
-
+#endif
                 }
             }
 
             return base.VisitInvocationExpression(node);
         }
 
+        private StatementSyntax CreateProcessingStep(List<InvocationExpressionSyntax> chain, int chainIndex, ITypeSymbol itemType, string itemName, ArgumentListSyntax arguments, Func<ExpressionSyntax, StatementSyntax> finalStatement)
+        {
+            var invocationExpressionSyntax = chain[chainIndex];
+            var method = GetMethodFullName(invocationExpressionSyntax);
+
+
+            if (method == WhereMethod)
+            {
+                var lambda = (LambdaExpressionSyntax)invocationExpressionSyntax.ArgumentList.Arguments[0].Expression;
+
+                var simpleLambda = lambda as SimpleLambdaExpressionSyntax;
+
+                var parameters = simpleLambda != null ? (IEnumerable<ParameterSyntax>)new[] { simpleLambda.Parameter } : ((ParenthesizedLambdaExpressionSyntax)lambda).ParameterList.Parameters;
+
+
+                lambda = RenameSymbol(lambda, 0, itemName);
+                var check = InlineOrCreateMethod(lambda.Body, arguments, CreateParameter("el", itemType));
+                var next = chainIndex == 1 ? finalStatement(SyntaxFactory.IdentifierName(itemName)) : CreateProcessingStep(chain, chainIndex - 1, itemType, itemName, arguments, finalStatement);
+                return SyntaxFactory.IfStatement(check, next is BlockSyntax ? next : SyntaxFactory.Block(next));
+            }
+
+
+            if (method == SelectMethod)
+            {
+                var lambda = (LambdaExpressionSyntax)invocationExpressionSyntax.ArgumentList.Arguments[0].Expression;
+
+                var simpleLambda = lambda as SimpleLambdaExpressionSyntax;
+
+                var parameters = simpleLambda != null ? (IEnumerable<ParameterSyntax>)new[] { simpleLambda.Parameter } : ((ParenthesizedLambdaExpressionSyntax)lambda).ParameterList.Parameters;
+
+                var newname = "gattone" + ++lastId;
+                lambda = RenameSymbol(lambda, 0, itemName);
+                var local = CreateLocalVariableDeclaration(newname, InlineOrCreateMethod(lambda.Body, arguments, CreateParameter(itemName, itemType)));
+                
+                
+                var next = chainIndex == 1 ? finalStatement(SyntaxFactory.IdentifierName(newname)) : CreateProcessingStep(chain, chainIndex - 1, itemType, newname, arguments, finalStatement);
+                var nexts = next is BlockSyntax ? ((BlockSyntax)next).Statements : (IEnumerable<StatementSyntax>)new [] { next };
+                return SyntaxFactory.Block(new[] { local }.Concat(  nexts )) ;
+            }
+
+
+
+            throw new NotImplementedException();
+        }
+
+        private LambdaExpressionSyntax RenameSymbol(LambdaExpressionSyntax container, int argIndex, string newname)
+        {
+
+            var doc = project.Documents.Single();
+            var docid = doc.Id;
+
+            var annot = new SyntaxAnnotation("RenamedLambda");
+            var annotated = container.WithAdditionalAnnotations(annot);
+            var root = project.GetDocument(docid).GetSyntaxRootAsync().Result.ReplaceNode(container, annotated).SyntaxTree;
+            var proj = project.GetDocument(docid).WithSyntaxRoot(root.GetRoot()).Project;
+            doc = proj.GetDocument(docid);
+            var syntaxTree = doc.GetSyntaxTreeAsync().Result;
+            var modifiedSemantic = proj.GetCompilationAsync().Result.GetSemanticModel(syntaxTree);
+            annotated = (LambdaExpressionSyntax)doc.GetSyntaxRootAsync().Result.GetAnnotatedNodes(annot).First();
+            var parameter = (annotated as SimpleLambdaExpressionSyntax)?.Parameter ?? ((ParenthesizedLambdaExpressionSyntax)annotated).ParameterList.Parameters[argIndex];
+            var renamed = Renamer.RenameSymbolAsync(proj.Solution, modifiedSemantic.GetDeclaredSymbol(parameter), newname, null).Result;
+            //var renamed =Renamer.RenameSymbolAsync(project. RenameSymbolAsync(project.Documents.Single(), lambda, parameters.First().Identifier, "gattone", CancellationToken.None).Result;
+            annotated = (LambdaExpressionSyntax)renamed.GetDocument(doc.Id).GetSyntaxRootAsync().Result.GetAnnotatedNodes(annot).First();
+            return annotated.WithoutAnnotations();
+        }
+
         readonly static string AnyWithConditionMethod = "System.Collections.Generic.IEnumerable<TSource>.Any<TSource>(System.Func<TSource, bool>)";
         readonly static string SumWithSelectorMethod = "System.Collections.Generic.IEnumerable<TSource>.Sum<TSource>(System.Func<TSource, int>)";
         readonly static string SumIntsMethod = "System.Collections.Generic.IEnumerable<int>.Sum()";
         readonly static string WhereMethod = "System.Collections.Generic.IEnumerable<TSource>.Where<TSource>(System.Func<TSource, bool>)";
+        readonly static string SelectMethod = "System.Collections.Generic.IEnumerable<TSource>.Select<TSource, TResult>(System.Func<TSource, TResult>)";
+
+        //public static async Task<Solution> RenameSymbolAsync(Document document, SyntaxNode root, SyntaxToken declarationToken, string newName, CancellationToken cancellationToken)
+        //{
+        //    var annotation = RenameAnnotation.Create();
+        //    var annotatedRoot = root.ReplaceToken(declarationToken, declarationToken.WithAdditionalAnnotations());
+        //    var annotatedSolution = document.Project.Solution.WithDocumentSyntaxRoot(document.Id, annotatedRoot);
+        //    var annotatedDocument = annotatedSolution.GetDocument(document.Id);
+
+        //    annotatedRoot = await annotatedDocument.GetSyntaxRootAsync(cancellationToken).ConfigureAwait(false);
+        //    var annotatedToken = annotatedRoot.FindToken(declarationToken.SpanStart);
+
+        //    var semanticModel = await annotatedDocument.GetSemanticModelAsync(cancellationToken).ConfigureAwait(false);
+        //    var symbol = semanticModel?.GetDeclaredSymbol(annotatedToken.Parent, cancellationToken);
+
+        //    var newSolution = await Renamer.RenameSymbolAsync(annotatedSolution, symbol, newName, null, cancellationToken).ConfigureAwait(false);
+        //    return newSolution;
+        //}
 
         ITypeSymbol GetSymbolType(VariableCapture x)
         {
@@ -224,7 +348,7 @@ namespace RoslynLinqRewrite
 
 
 
-        private ExpressionSyntax RewriteAsLoop(TypeSyntax returnType, IEnumerable<StatementSyntax> prologue, Func<ArgumentListSyntax, StatementSyntax> loopBody, IEnumerable<StatementSyntax> epilogue, Func<string> loopVariable, ExpressionSyntax collection)
+        private ExpressionSyntax RewriteAsLoop(TypeSyntax returnType, IEnumerable<StatementSyntax> prologue, Func<ArgumentListSyntax, StatementSyntax> loopBody, IEnumerable<StatementSyntax> epilogue, ExpressionSyntax collection)
         {
             var parameters = new[] { CreateParameter(ItemsName, semantic.GetTypeInfo(collection).Type) }.Concat(currentFlow.Select(x => CreateParameter(x.Name, GetSymbolType(x.Symbol)).WithRef(x.Changes)));
 
@@ -235,9 +359,9 @@ namespace RoslynLinqRewrite
             var body = foreachBody(arguments);
             var loop = SyntaxFactory.ForEachStatement(
                 SyntaxFactory.IdentifierName("var"),
-                loopVariable(),
+                ItemName,
                 SyntaxFactory.IdentifierName(ItemsName),
-                body);
+                SyntaxFactory.Block(body));
             var coreFunction = SyntaxFactory.MethodDeclaration(returnType, functionName)
                         .WithParameterList(CreateParameters(parameters))
                         .WithBody(SyntaxFactory.Block(prologue.Concat(new[] {
@@ -274,18 +398,16 @@ namespace RoslynLinqRewrite
             return changed;
         }
 
-        private ExpressionSyntax InlineOrCreateMethod(CSharpSyntaxNode body, ArgumentListSyntax arguments, ParameterSyntax arg, out string itemArg)
+        private ExpressionSyntax InlineOrCreateMethod(CSharpSyntaxNode body, ArgumentListSyntax arguments, ParameterSyntax arg)
         {
             var fn = "ProceduralLinqHelper" + ++lastId;
 
             if (body is ExpressionSyntax)
             {
-                itemArg = arg.Identifier.ValueText;
                 return (ExpressionSyntax)body;
             }
             else
             {
-                itemArg = ItemName;
                 var method = SyntaxFactory.MethodDeclaration(CreatePrimitiveType(SyntaxKind.BoolKeyword), fn)
                                 .WithParameterList(SyntaxFactory.ParameterList(SyntaxFactory.SeparatedList(
                                     new[] {
