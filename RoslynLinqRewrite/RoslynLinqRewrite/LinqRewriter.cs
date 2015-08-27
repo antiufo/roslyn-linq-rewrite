@@ -33,22 +33,20 @@ namespace RoslynLinqRewrite
                         var CounterVariableName = "found1";
                         var ItemName = "item1";
                         var MainName = "Any" + lastId;
-                        var ItemsName = "items1";
                         
+
                         var arg = (lambda as SimpleLambdaExpressionSyntax)?.Parameter ?? ((ParenthesizedLambdaExpressionSyntax)lambda).ParameterList.Parameters.Single();
                         var body = lambda.Body;
                         var itemType = semantic.GetDeclaredSymbol(arg).Type;
 
                         var flow = semantic.AnalyzeDataFlow(body);
-                        
+
                         var found = CreateLocalVariableDeclaration(CounterVariableName, SyntaxFactory.IdentifierName("false"));
 
                         MethodDeclarationSyntax checkFunction;
                         var arguments = CreateArguments(new[] { SyntaxFactory.Argument(SyntaxFactory.IdentifierName(ItemName)) }.Concat(flow.Captured.Select(x => SyntaxFactory.Argument(SyntaxFactory.IdentifierName(x.Name)).WithRef(flow.WrittenInside.Contains(x)))));
                         var foreachBody = SyntaxFactory.IfStatement(
-                            InlineOrCreateMethod((CSharpSyntaxNode)Visit(body), out checkFunction, arguments, flow, CreateParameter(arg.Identifier, itemType))
-                            ,
-                            //SyntaxFactory.Block(SyntaxFactory.ExpressionStatement(SyntaxFactory.AssignmentExpression(SyntaxKind.SimpleAssignmentExpression, SyntaxFactory.IdentifierName(CounterVariableName), SyntaxFactory.IdentifierName("true"))), SyntaxFactory.BreakStatement())
+                            InlineOrCreateMethod((CSharpSyntaxNode)Visit(body), out checkFunction, arguments, flow, CreateParameter(arg.Identifier, itemType)),
                             SyntaxFactory.ReturnStatement(SyntaxFactory.LiteralExpression(SyntaxKind.TrueLiteralExpression))
                             );
 
@@ -60,14 +58,18 @@ namespace RoslynLinqRewrite
                             checkFunction = checkFunction
                                 .WithStatic(semantic.GetDeclaredSymbol(node.FirstAncestorOrSelf<MethodDeclarationSyntax>()).IsStatic)
                                 .NormalizeWhitespace();
-                        
-                        var coreFunction = SyntaxFactory.MethodDeclaration(CreatePrimitiveType(SyntaxKind.BoolKeyword), MainName)
-                            .WithParameterList(CreateParameters(new[] { CreateParameter(ItemsName, semantic.GetTypeInfo(collection).Type) }.Concat(flow.Captured.Select(x => CreateParameter(x.Name, GetSymbolType(x)).WithRef(flow.WrittenInside.Contains(x))))))
-                            .WithBody(SyntaxFactory.Block(loop, SyntaxFactory.ReturnStatement(SyntaxFactory.LiteralExpression(SyntaxKind.FalseLiteralExpression))))
-                            .WithStatic(semantic.GetDeclaredSymbol(node.FirstAncestorOrSelf<MethodDeclarationSyntax>()).IsStatic)
-                            .NormalizeWhitespace();
 
-                        methodsToAddToCurrentType.Add(coreFunction);
+                        RewriteAsLoop(
+                            MainName,
+                            new[] { CreateParameter(ItemsName, semantic.GetTypeInfo(collection).Type) }.Concat(flow.Captured.Select(x => CreateParameter(x.Name, GetSymbolType(x)).WithRef(flow.WrittenInside.Contains(x)))),
+                            CreatePrimitiveType(SyntaxKind.BoolKeyword),
+                            Enumerable.Empty<StatementSyntax>(),
+                            foreachBody,
+                            new[] { SyntaxFactory.ReturnStatement(SyntaxFactory.LiteralExpression(SyntaxKind.FalseLiteralExpression)) },
+                            semantic.GetDeclaredSymbol(node.FirstAncestorOrSelf<MethodDeclarationSyntax>()).IsStatic,
+                            checkFunction == null ? semantic.GetDeclaredSymbol(arg).Name : ItemName
+                        );
+
                         if (checkFunction != null)
                             methodsToAddToCurrentType.Add(checkFunction);
 
@@ -78,6 +80,24 @@ namespace RoslynLinqRewrite
             }
 
             return base.VisitInvocationExpression(node);
+        }
+        const string ItemsName = "theitems";
+        private void RewriteAsLoop(string functionName, IEnumerable<ParameterSyntax> parameters, TypeSyntax returnType, IEnumerable<StatementSyntax> prologue, StatementSyntax loopBody, IEnumerable<StatementSyntax> epilogue, bool isStatic, string loopVariable)
+        {
+            var foreachBody = loopBody;
+            var loop = SyntaxFactory.ForEachStatement(
+                SyntaxFactory.IdentifierName("var"),
+                loopVariable, 
+                SyntaxFactory.IdentifierName(ItemsName),
+                foreachBody);
+            var coreFunction = SyntaxFactory.MethodDeclaration(returnType, functionName)
+                        .WithParameterList(CreateParameters(parameters))
+                        .WithBody(SyntaxFactory.Block(prologue.Concat(new[] {
+                            loop
+                        }).Concat(epilogue)))
+                        .WithStatic(isStatic)
+                        .NormalizeWhitespace();
+            methodsToAddToCurrentType.Add(coreFunction);
         }
 
         private static PredefinedTypeSyntax CreatePrimitiveType(SyntaxKind boolKeyword)

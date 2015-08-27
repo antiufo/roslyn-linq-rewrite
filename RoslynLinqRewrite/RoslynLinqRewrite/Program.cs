@@ -17,14 +17,11 @@ using System.Linq;
 
 class Meow
 {
-    static int Meeeow;
     static void Main()
     {
         var arr = new []{ 5, 457, 7464, 66 };
         var capture = 5;
-        var lol = 3;
-        //const int c = 2;
-        var k = arr.Any(x =>{return x > capture++ + Meeeow-- + Convert.ToInt32( arr.Any(y=>y>5)) + lol;});
+        var k = arr.Any(x => x > capture);
     }
 }
 ";
