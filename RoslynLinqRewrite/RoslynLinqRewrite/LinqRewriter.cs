@@ -23,7 +23,7 @@ namespace RoslynLinqRewrite
             if (memberAccess != null)
             {
                 var symbol = semantic.GetSymbolInfo(memberAccess).Symbol as IMethodSymbol;
-                var isStatic = semantic.GetDeclaredSymbol(node.FirstAncestorOrSelf<MethodDeclarationSyntax>()).IsStatic;
+                currentMethodIsStatic = semantic.GetDeclaredSymbol(node.FirstAncestorOrSelf<MethodDeclarationSyntax>()).IsStatic;
 
                 if (symbol.ContainingType.ToString() == "System.Linq.Enumerable")
                 {
@@ -34,62 +34,52 @@ namespace RoslynLinqRewrite
 
                     var itemType = collectionType is IArrayTypeSymbol ? ((IArrayTypeSymbol)collectionType).ElementType : collectionType.AllInterfaces.Concat(new[] { collectionType }).OfType<INamedTypeSymbol>().First(x => x.IsGenericType && x.ConstructUnboundGenericType().ToString() == "System.Collections.Generic.IEnumerable<>").TypeArguments.First();
                     var dataFlow = lambda != null ? semantic.AnalyzeDataFlow(lambda.Body) : null;
-                    var flow = dataFlow?.Captured.Select(x => new VariableCapture(x, dataFlow.WrittenInside.Contains(x))) ?? Enumerable.Empty<VariableCapture>();
+                    currentFlow = dataFlow?.Captured.Select(x => new VariableCapture(x, dataFlow.WrittenInside.Contains(x))) ?? Enumerable.Empty<VariableCapture>();
 
 
                     if (GetMethodFullName(node) == AnyWithConditionMethod)
                     {
-                        lastId++;
+                      
 
                         string itemArg = null;
                         return RewriteAsLoop(
-                            "Any" + lastId,
-                            new[] { CreateParameter(ItemsName, semantic.GetTypeInfo(collection).Type) }.Concat(flow.Select(x => CreateParameter(x.Name, GetSymbolType(x.Symbol)).WithRef(x.Changes))),
                             CreatePrimitiveType(SyntaxKind.BoolKeyword),
                             Enumerable.Empty<StatementSyntax>(),
                             arguments =>
                             {
                                 return SyntaxFactory.IfStatement(
-                                 InlineOrCreateMethod((CSharpSyntaxNode)Visit(lambda.Body), arguments, flow, CreateParameter(arg.Identifier, itemType), isStatic, out itemArg),
+                                 InlineOrCreateMethod((CSharpSyntaxNode)Visit(lambda.Body), arguments, CreateParameter(arg.Identifier, itemType), out itemArg),
                                  SyntaxFactory.ReturnStatement(SyntaxFactory.LiteralExpression(SyntaxKind.TrueLiteralExpression))
                              );
                             },
                             new[] { SyntaxFactory.ReturnStatement(SyntaxFactory.LiteralExpression(SyntaxKind.FalseLiteralExpression)) },
-                            isStatic,
                             () => itemArg,
-                            collection,
-                            flow
+                            collection
                         );
                     }
 
                     if (GetMethodFullName(node) == WhereMethod)
                     {
-                        lastId++;
 
                         string itemArg = null;
                         return RewriteAsLoop(
-                            "Where" + lastId,
-                            new[] { CreateParameter(ItemsName, semantic.GetTypeInfo(collection).Type) }.Concat(flow.Select(x => CreateParameter(x.Name, GetSymbolType(x.Symbol)).WithRef(x.Changes))),
                             SyntaxFactory.ParseTypeName("System.Collections.Generic.IEnumerable<" + itemType.ToDisplayString() + ">"),
                             Enumerable.Empty<StatementSyntax>(),
                             arguments =>
                             {
                                 return SyntaxFactory.IfStatement(
-                                 InlineOrCreateMethod((CSharpSyntaxNode)Visit(lambda.Body), arguments, flow, CreateParameter(arg.Identifier, itemType), isStatic, out itemArg),
+                                 InlineOrCreateMethod((CSharpSyntaxNode)Visit(lambda.Body), arguments, CreateParameter(arg.Identifier, itemType), out itemArg),
                                  SyntaxFactory.YieldStatement(SyntaxKind.YieldReturnStatement, SyntaxFactory.IdentifierName(arg.Identifier))
                              );
                             },
                             Enumerable.Empty<StatementSyntax>(),
-                            isStatic,
                             () => itemArg,
-                            collection,
-                            flow
+                            collection
                         );
                     }
 
                     if (GetMethodFullName(node) == SumWithSelectorMethod)
                     {
-                        lastId++;
 
                         string itemArg = null;
 
@@ -101,45 +91,37 @@ namespace RoslynLinqRewrite
                         {
 
                             return RewriteAsLoop(
-                                "SumWhere" + lastId,
-                                new[] { CreateParameter(ItemsName, semantic.GetTypeInfo(collection).Type) }.Concat(flow.Select(x => CreateParameter(x.Name, GetSymbolType(x.Symbol)).WithRef(x.Changes))),
                                 CreatePrimitiveType(SyntaxKind.IntKeyword),
                                 new[] { CreateLocalVariableDeclaration("sum_", SyntaxFactory.LiteralExpression(SyntaxKind.NumericLiteralExpression, SyntaxFactory.Literal(0))) },
                                 arguments =>
                                 {
                                     return SyntaxFactory.IfStatement(
-                                    InlineOrCreateMethod((CSharpSyntaxNode)Visit(lambda.Body), arguments, flow, CreateParameter(arg.Identifier, itemType), isStatic, out itemArg),
+                                    InlineOrCreateMethod((CSharpSyntaxNode)Visit(lambda.Body), arguments, CreateParameter(arg.Identifier, itemType), out itemArg),
                                     SyntaxFactory.ExpressionStatement(SyntaxFactory.AssignmentExpression(SyntaxKind.AddAssignmentExpression, SyntaxFactory.IdentifierName("sum_"),
-                                         InlineOrCreateMethod((CSharpSyntaxNode)Visit(lambda.Body), arguments, flow, CreateParameter(arg.Identifier, itemType), isStatic, out itemArg)))
+                                         InlineOrCreateMethod((CSharpSyntaxNode)Visit(lambda.Body), arguments, CreateParameter(arg.Identifier, itemType), out itemArg)))
                                          );
 
                                 },
                                 new[] { SyntaxFactory.ReturnStatement(SyntaxFactory.IdentifierName("sum_")) },
-                                isStatic,
                                 () => itemArg,
-                                collection,
-                                flow
+                                collection
                             );
 
                         }
                         else
                         {
                             return RewriteAsLoop(
-                               "Sum" + lastId,
-                               new[] { CreateParameter(ItemsName, semantic.GetTypeInfo(collection).Type) }.Concat(flow.Select(x => CreateParameter(x.Name, GetSymbolType(x.Symbol)).WithRef(x.Changes))),
                                CreatePrimitiveType(SyntaxKind.IntKeyword),
                                new[] { CreateLocalVariableDeclaration("sum_", SyntaxFactory.LiteralExpression(SyntaxKind.NumericLiteralExpression, SyntaxFactory.Literal(0))) },
                                arguments =>
                                {
                                    return SyntaxFactory.ExpressionStatement(SyntaxFactory.AssignmentExpression(SyntaxKind.AddAssignmentExpression, SyntaxFactory.IdentifierName("sum_"),
-                                        InlineOrCreateMethod((CSharpSyntaxNode)Visit(lambda.Body), arguments, flow, CreateParameter(arg.Identifier, itemType), isStatic, out itemArg)));
+                                        InlineOrCreateMethod((CSharpSyntaxNode)Visit(lambda.Body), arguments, CreateParameter(arg.Identifier, itemType), out itemArg)));
 
                                },
                                new[] { SyntaxFactory.ReturnStatement(SyntaxFactory.IdentifierName("sum_")) },
-                               isStatic,
                                () => itemArg,
-                               collection,
-                               flow
+                               collection
                            );
                         }
 
@@ -151,21 +133,17 @@ namespace RoslynLinqRewrite
                     {
                         string itemArg = null;
                         return RewriteAsLoop(
-                            "Sum" + lastId,
-                            new[] { CreateParameter(ItemsName, semantic.GetTypeInfo(collection).Type) }.Concat(flow.Select(x => CreateParameter(x.Name, GetSymbolType(x)).WithRef(x.Changes))),
                             CreatePrimitiveType(SyntaxKind.IntKeyword),
                             new[] { CreateLocalVariableDeclaration("sum_", SyntaxFactory.LiteralExpression(SyntaxKind.NumericLiteralExpression, SyntaxFactory.Literal(0))) },
                             arguments =>
                             {
                                 return SyntaxFactory.ExpressionStatement(SyntaxFactory.AssignmentExpression(SyntaxKind.AddAssignmentExpression, SyntaxFactory.IdentifierName("sum_"),
-                                     InlineOrCreateMethod(SyntaxFactory.IdentifierName(ItemName), arguments, flow, CreateParameter(ItemName, itemType), isStatic, out itemArg)));
+                                     InlineOrCreateMethod(SyntaxFactory.IdentifierName(ItemName), arguments, CreateParameter(ItemName, itemType), out itemArg)));
 
                             },
                             new[] { SyntaxFactory.ReturnStatement(SyntaxFactory.IdentifierName("sum_")) },
-                            isStatic,
                             () => itemArg,
-                            collection,
-                            flow
+                            collection
                         );
                     }
 
@@ -215,9 +193,12 @@ namespace RoslynLinqRewrite
 
 
 
-        private ExpressionSyntax RewriteAsLoop(string functionName, IEnumerable<ParameterSyntax> parameters, TypeSyntax returnType, IEnumerable<StatementSyntax> prologue, Func<ArgumentListSyntax, StatementSyntax> loopBody, IEnumerable<StatementSyntax> epilogue, bool isStatic, Func<string> loopVariable, ExpressionSyntax collection, IEnumerable<VariableCapture> flow)
+        private ExpressionSyntax RewriteAsLoop(TypeSyntax returnType, IEnumerable<StatementSyntax> prologue, Func<ArgumentListSyntax, StatementSyntax> loopBody, IEnumerable<StatementSyntax> epilogue, Func<string> loopVariable, ExpressionSyntax collection)
         {
-            var arguments = CreateArguments(new[] { SyntaxFactory.Argument(SyntaxFactory.IdentifierName(ItemName)) }.Concat(flow.Select(x => SyntaxFactory.Argument(SyntaxFactory.IdentifierName(x.Name)).WithRef(x.Changes))));
+            var parameters = new[] { CreateParameter(ItemsName, semantic.GetTypeInfo(collection).Type) }.Concat(currentFlow.Select(x => CreateParameter(x.Name, GetSymbolType(x.Symbol)).WithRef(x.Changes)));
+
+            var functionName = "ProceduralLinq" + ++lastId;
+            var arguments = CreateArguments(new[] { SyntaxFactory.Argument(SyntaxFactory.IdentifierName(ItemName)) }.Concat(currentFlow.Select(x => SyntaxFactory.Argument(SyntaxFactory.IdentifierName(x.Name)).WithRef(x.Changes))));
 
             var foreachBody = loopBody;
             var body = foreachBody(arguments);
@@ -231,7 +212,7 @@ namespace RoslynLinqRewrite
                         .WithBody(SyntaxFactory.Block(prologue.Concat(new[] {
                             loop
                         }).Concat(epilogue)))
-                        .WithStatic(isStatic)
+                        .WithStatic(currentMethodIsStatic)
                         .NormalizeWhitespace();
             methodsToAddToCurrentType.Add(coreFunction);
 
@@ -247,6 +228,8 @@ namespace RoslynLinqRewrite
 
         private List<MethodDeclarationSyntax> methodsToAddToCurrentType = new List<MethodDeclarationSyntax>();
         private int lastId;
+        private bool currentMethodIsStatic;
+        private IEnumerable<VariableCapture> currentFlow;
 
         public override SyntaxNode VisitStructDeclaration(StructDeclarationSyntax node)
         {
@@ -260,9 +243,9 @@ namespace RoslynLinqRewrite
             return changed;
         }
 
-        private ExpressionSyntax InlineOrCreateMethod(CSharpSyntaxNode body, ArgumentListSyntax arguments, IEnumerable<VariableCapture> flow, ParameterSyntax arg, bool isStatic, out string itemArg)
+        private ExpressionSyntax InlineOrCreateMethod(CSharpSyntaxNode body, ArgumentListSyntax arguments, ParameterSyntax arg, out string itemArg)
         {
-            var fn = "Check" + lastId;
+            var fn = "ProceduralLinqHelper" + ++lastId;
 
             if (body is ExpressionSyntax)
             {
@@ -276,10 +259,10 @@ namespace RoslynLinqRewrite
                                 .WithParameterList(SyntaxFactory.ParameterList(SyntaxFactory.SeparatedList(
                                     new[] {
                                     arg
-                                    }.Union(flow.Select(x => CreateParameter(x.Name, GetSymbolType(x)).WithRef(x.Changes)))
+                                    }.Union(currentFlow.Select(x => CreateParameter(x.Name, GetSymbolType(x)).WithRef(x.Changes)))
                                  )))
                                 .WithBody(body as BlockSyntax ?? (body is StatementSyntax ? SyntaxFactory.Block((StatementSyntax)body) : SyntaxFactory.Block(SyntaxFactory.ReturnStatement((ExpressionSyntax)body))))
-                                .WithStatic(isStatic)
+                                .WithStatic(currentMethodIsStatic)
                                 .NormalizeWhitespace();
 
 
