@@ -24,15 +24,6 @@ namespace RoslynLinqRewrite
         }
 
 
-
-        private delegate bool IsMethodSequenceDelegate(
-            string p0,
-            string p1 = null,
-            string p2 = null,
-            string p3 = null,
-            string p4 = null,
-            string p5 = null
-            );
         public override SyntaxNode VisitInvocationExpression(InvocationExpressionSyntax node)
         {
 
@@ -44,9 +35,7 @@ namespace RoslynLinqRewrite
 
                 if (symbol.ContainingType.ToString() == "System.Linq.Enumerable")
                 {
-                    //var lambda = node.ArgumentList.Arguments.FirstOrDefault()?.Expression as LambdaExpressionSyntax;
-                    //var arg = (lambda as SimpleLambdaExpressionSyntax)?.Parameter ?? (lambda as ParenthesizedLambdaExpressionSyntax)?.ParameterList.Parameters.FirstOrDefault();
-
+          
                     var firstArg = node.ArgumentList.Arguments.FirstOrDefault()?.Expression;
                     var dataFlow = semantic.AnalyzeDataFlow(node);
                     var chain = new List<InvocationExpressionSyntax>();
@@ -61,17 +50,7 @@ namespace RoslynLinqRewrite
                     var collection = ((MemberAccessExpressionSyntax)chain.Last().Expression).Expression;
 
                     var methodNames = Enumerable.Range(0, 5).Select(x => x < chain.Count ? GetMethodFullName(chain[x]) : null).ToList();
-                    IsMethodSequenceDelegate IsMethodSequence = (p0, p1, p2, p3, p4, p5) =>
-                    {
-                        if (p0 != null && methodNames[0] != p0) return false;
-                        if (p1 != null && methodNames[1] != p1) return false;
-                        if (p2 != null && methodNames[2] != p2) return false;
-                        if (p3 != null && methodNames[3] != p3) return false;
-                        if (p4 != null && methodNames[4] != p4) return false;
-                        if (p5 != null && methodNames[5] != p5) return false;
 
-                        return true;
-                    };
                     currentFlow = dataFlow?.Captured.Select(x => new VariableCapture(x, dataFlow.WrittenInside.Contains(x))) ?? Enumerable.Empty<VariableCapture>();
 
 
@@ -93,21 +72,20 @@ namespace RoslynLinqRewrite
                         );
                     }
 
-                    //if (aggregationMethod == SumIntsMethod)
-                    //{
-                    //    return RewriteAsLoop(
-                    //        CreatePrimitiveType(SyntaxKind.IntKeyword),
-                    //        new[] { CreateLocalVariableDeclaration("sum_", SyntaxFactory.LiteralExpression(SyntaxKind.NumericLiteralExpression, SyntaxFactory.Literal(0))) },
-                    //        (itemName, t, arguments) =>
-                    //        {
-                    //            return CreateProcessingStep(chain, chain.Count - 1, t, itemName, arguments,
-                    //                x => SyntaxFactory.ExpressionStatement(SyntaxFactory.AssignmentExpression(SyntaxKind.AddAssignmentExpression, SyntaxFactory.IdentifierName("sum_"), SyntaxFactory.IdentifierName(x)))
-                    //                );
-                    //        },
-                    //        new[] { SyntaxFactory.ReturnStatement(SyntaxFactory.IdentifierName("sum_")) },
-                    //        collection
-                    //    );
-                    //}
+                    if (aggregationMethod == SumIntsMethod)
+                    {
+                        return RewriteAsLoop(
+                            CreatePrimitiveType(SyntaxKind.IntKeyword),
+                            new[] { CreateLocalVariableDeclaration("sum_", SyntaxFactory.LiteralExpression(SyntaxKind.NumericLiteralExpression, SyntaxFactory.Literal(0))) },
+                            new[] { SyntaxFactory.ReturnStatement(SyntaxFactory.IdentifierName("sum_")) },
+                            collection,
+                            chain,
+                            (inv, arguments, param)=> {
+
+                                return SyntaxFactory.ExpressionStatement(SyntaxFactory.AssignmentExpression(SyntaxKind.AddAssignmentExpression, SyntaxFactory.IdentifierName("sum_"), SyntaxFactory.IdentifierName(param.Identifier.ValueText)));
+                            }
+                        );
+                    }
                     if (aggregationMethod == AnyWithConditionMethod)
                     {
 
@@ -381,7 +359,6 @@ namespace RoslynLinqRewrite
             annotated = (LambdaExpressionSyntax)doc.GetSyntaxRootAsync().Result.GetAnnotatedNodes(annot).First();
             var parameter = GetLambdaParameter(annotated, 0);
             var renamed = Renamer.RenameSymbolAsync(proj.Solution, modifiedSemantic.GetDeclaredSymbol(parameter), newname, null).Result;
-            //var renamed =Renamer.RenameSymbolAsync(project. RenameSymbolAsync(project.Documents.Single(), lambda, parameters.First().Identifier, "gattone", CancellationToken.None).Result;
             annotated = (LambdaExpressionSyntax)renamed.GetDocument(doc.Id).GetSyntaxRootAsync().Result.GetAnnotatedNodes(annot).First();
             return annotated.WithoutAnnotations();
         }
@@ -397,23 +374,7 @@ namespace RoslynLinqRewrite
         readonly static string WhereMethod = "System.Collections.Generic.IEnumerable<TSource>.Where<TSource>(System.Func<TSource, bool>)";
         readonly static string SelectMethod = "System.Collections.Generic.IEnumerable<TSource>.Select<TSource, TResult>(System.Func<TSource, TResult>)";
 
-        //public static async Task<Solution> RenameSymbolAsync(Document document, SyntaxNode root, SyntaxToken declarationToken, string newName, CancellationToken cancellationToken)
-        //{
-        //    var annotation = RenameAnnotation.Create();
-        //    var annotatedRoot = root.ReplaceToken(declarationToken, declarationToken.WithAdditionalAnnotations());
-        //    var annotatedSolution = document.Project.Solution.WithDocumentSyntaxRoot(document.Id, annotatedRoot);
-        //    var annotatedDocument = annotatedSolution.GetDocument(document.Id);
-
-        //    annotatedRoot = await annotatedDocument.GetSyntaxRootAsync(cancellationToken).ConfigureAwait(false);
-        //    var annotatedToken = annotatedRoot.FindToken(declarationToken.SpanStart);
-
-        //    var semanticModel = await annotatedDocument.GetSemanticModelAsync(cancellationToken).ConfigureAwait(false);
-        //    var symbol = semanticModel?.GetDeclaredSymbol(annotatedToken.Parent, cancellationToken);
-
-        //    var newSolution = await Renamer.RenameSymbolAsync(annotatedSolution, symbol, newName, null, cancellationToken).ConfigureAwait(false);
-        //    return newSolution;
-        //}
-
+       
         ITypeSymbol GetSymbolType(VariableCapture x)
         {
             return GetSymbolType(x.Symbol);
