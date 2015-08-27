@@ -37,7 +37,7 @@ namespace RoslynLinqRewrite
                     var flow = dataFlow?.Captured.Select(x => new VariableCapture(x, dataFlow.WrittenInside.Contains(x))) ?? Enumerable.Empty<VariableCapture>();
 
 
-                    if (symbol?.Name == "Any" && lambda != null && arg != null)
+                    if (GetMethodFullName(node) == AnyWithConditionMethod)
                     {
                         lastId++;
 
@@ -62,7 +62,7 @@ namespace RoslynLinqRewrite
                         );
                     }
 
-                    if (symbol?.Name == "Where" && lambda != null && arg != null)
+                    if (GetMethodFullName(node) == WhereMethod)
                     {
                         lastId++;
 
@@ -87,22 +87,31 @@ namespace RoslynLinqRewrite
                         );
                     }
 
-                    if (symbol?.Name == "Sum")
+                    if (GetMethodFullName(node) == SumWithSelectorMethod)
                     {
                         lastId++;
 
                         string itemArg = null;
-                        if (lambda != null)
+
+
+
+                        var innerInvocation = collection as InvocationExpressionSyntax;
+                        var innerMethodName = innerInvocation != null ? semantic.GetSymbolInfo(innerInvocation.Expression).Symbol : null;
+                        if (innerMethodName.Name == "Where")
                         {
+
                             return RewriteAsLoop(
-                                "Sum" + lastId,
+                                "SumWhere" + lastId,
                                 new[] { CreateParameter(ItemsName, semantic.GetTypeInfo(collection).Type) }.Concat(flow.Select(x => CreateParameter(x.Name, GetSymbolType(x.Symbol)).WithRef(x.Changes))),
                                 CreatePrimitiveType(SyntaxKind.IntKeyword),
                                 new[] { CreateLocalVariableDeclaration("sum_", SyntaxFactory.LiteralExpression(SyntaxKind.NumericLiteralExpression, SyntaxFactory.Literal(0))) },
                                 arguments =>
                                 {
-                                    return SyntaxFactory.ExpressionStatement(SyntaxFactory.AssignmentExpression(SyntaxKind.AddAssignmentExpression, SyntaxFactory.IdentifierName("sum_"),
-                                         InlineOrCreateMethod((CSharpSyntaxNode)Visit(lambda.Body), arguments, flow, CreateParameter(arg.Identifier, itemType), isStatic, out itemArg)));
+                                    return SyntaxFactory.IfStatement(
+                                    InlineOrCreateMethod((CSharpSyntaxNode)Visit(lambda.Body), arguments, flow, CreateParameter(arg.Identifier, itemType), isStatic, out itemArg),
+                                    SyntaxFactory.ExpressionStatement(SyntaxFactory.AssignmentExpression(SyntaxKind.AddAssignmentExpression, SyntaxFactory.IdentifierName("sum_"),
+                                         InlineOrCreateMethod((CSharpSyntaxNode)Visit(lambda.Body), arguments, flow, CreateParameter(arg.Identifier, itemType), isStatic, out itemArg)))
+                                         );
 
                                 },
                                 new[] { SyntaxFactory.ReturnStatement(SyntaxFactory.IdentifierName("sum_")) },
@@ -111,27 +120,53 @@ namespace RoslynLinqRewrite
                                 collection,
                                 flow
                             );
+
                         }
                         else
                         {
                             return RewriteAsLoop(
-                                "Sum" + lastId,
-                                new[] { CreateParameter(ItemsName, semantic.GetTypeInfo(collection).Type) }.Concat(flow.Select(x => CreateParameter(x.Name, GetSymbolType(x)).WithRef(x.Changes))),
-                                CreatePrimitiveType(SyntaxKind.IntKeyword),
-                                new[] { CreateLocalVariableDeclaration("sum_", SyntaxFactory.LiteralExpression(SyntaxKind.NumericLiteralExpression, SyntaxFactory.Literal(0))) },
-                                arguments =>
-                                {
-                                    return SyntaxFactory.ExpressionStatement(SyntaxFactory.AssignmentExpression(SyntaxKind.AddAssignmentExpression, SyntaxFactory.IdentifierName("sum_"),
-                                         InlineOrCreateMethod(SyntaxFactory.IdentifierName(ItemName), arguments, flow, CreateParameter(ItemName, itemType), isStatic, out itemArg)));
+                               "Sum" + lastId,
+                               new[] { CreateParameter(ItemsName, semantic.GetTypeInfo(collection).Type) }.Concat(flow.Select(x => CreateParameter(x.Name, GetSymbolType(x.Symbol)).WithRef(x.Changes))),
+                               CreatePrimitiveType(SyntaxKind.IntKeyword),
+                               new[] { CreateLocalVariableDeclaration("sum_", SyntaxFactory.LiteralExpression(SyntaxKind.NumericLiteralExpression, SyntaxFactory.Literal(0))) },
+                               arguments =>
+                               {
+                                   return SyntaxFactory.ExpressionStatement(SyntaxFactory.AssignmentExpression(SyntaxKind.AddAssignmentExpression, SyntaxFactory.IdentifierName("sum_"),
+                                        InlineOrCreateMethod((CSharpSyntaxNode)Visit(lambda.Body), arguments, flow, CreateParameter(arg.Identifier, itemType), isStatic, out itemArg)));
 
-                                },
-                                new[] { SyntaxFactory.ReturnStatement(SyntaxFactory.IdentifierName("sum_")) },
-                                isStatic,
-                                () => itemArg,
-                                collection,
-                                flow
-                            );
+                               },
+                               new[] { SyntaxFactory.ReturnStatement(SyntaxFactory.IdentifierName("sum_")) },
+                               isStatic,
+                               () => itemArg,
+                               collection,
+                               flow
+                           );
                         }
+
+
+                    }
+
+
+                    if (GetMethodFullName(node) == SumIntsMethod)
+                    {
+                        string itemArg = null;
+                        return RewriteAsLoop(
+                            "Sum" + lastId,
+                            new[] { CreateParameter(ItemsName, semantic.GetTypeInfo(collection).Type) }.Concat(flow.Select(x => CreateParameter(x.Name, GetSymbolType(x)).WithRef(x.Changes))),
+                            CreatePrimitiveType(SyntaxKind.IntKeyword),
+                            new[] { CreateLocalVariableDeclaration("sum_", SyntaxFactory.LiteralExpression(SyntaxKind.NumericLiteralExpression, SyntaxFactory.Literal(0))) },
+                            arguments =>
+                            {
+                                return SyntaxFactory.ExpressionStatement(SyntaxFactory.AssignmentExpression(SyntaxKind.AddAssignmentExpression, SyntaxFactory.IdentifierName("sum_"),
+                                     InlineOrCreateMethod(SyntaxFactory.IdentifierName(ItemName), arguments, flow, CreateParameter(ItemName, itemType), isStatic, out itemArg)));
+
+                            },
+                            new[] { SyntaxFactory.ReturnStatement(SyntaxFactory.IdentifierName("sum_")) },
+                            isStatic,
+                            () => itemArg,
+                            collection,
+                            flow
+                        );
                     }
 
                 }
@@ -140,9 +175,24 @@ namespace RoslynLinqRewrite
             return base.VisitInvocationExpression(node);
         }
 
+        readonly static string AnyWithConditionMethod = "System.Collections.Generic.IEnumerable<TSource>.Any<TSource>(System.Func<TSource, bool>)";
+        readonly static string SumWithSelectorMethod = "System.Collections.Generic.IEnumerable<TSource>.Sum<TSource>(System.Func<TSource, int>)";
+        readonly static string SumIntsMethod = "System.Collections.Generic.IEnumerable<int>.Sum()";
+        readonly static string WhereMethod = "System.Collections.Generic.IEnumerable<TSource>.Where<TSource>(System.Func<TSource, bool>)";
+
         ITypeSymbol GetSymbolType(VariableCapture x)
         {
             return GetSymbolType(x.Symbol);
+        }
+
+        private string GetMethodFullName(CSharpSyntaxNode syntax)
+        {
+            var invocation = syntax as InvocationExpressionSyntax;
+            if (invocation != null)
+            {
+                return (semantic.GetSymbolInfo(invocation.Expression).Symbol as IMethodSymbol)?.ConstructedFrom.ToString();
+            }
+            return null;
         }
 
         const string ItemsName = "theitems";
@@ -162,6 +212,9 @@ namespace RoslynLinqRewrite
                 get { return Symbol.Name; }
             }
         }
+
+
+
         private ExpressionSyntax RewriteAsLoop(string functionName, IEnumerable<ParameterSyntax> parameters, TypeSyntax returnType, IEnumerable<StatementSyntax> prologue, Func<ArgumentListSyntax, StatementSyntax> loopBody, IEnumerable<StatementSyntax> epilogue, bool isStatic, Func<string> loopVariable, ExpressionSyntax collection, IEnumerable<VariableCapture> flow)
         {
             var arguments = CreateArguments(new[] { SyntaxFactory.Argument(SyntaxFactory.IdentifierName(ItemName)) }.Concat(flow.Select(x => SyntaxFactory.Argument(SyntaxFactory.IdentifierName(x.Name)).WithRef(x.Changes))));
@@ -183,7 +236,7 @@ namespace RoslynLinqRewrite
             methodsToAddToCurrentType.Add(coreFunction);
 
 
-            return SyntaxFactory.InvocationExpression(SyntaxFactory.IdentifierName(functionName), CreateArguments(new[] { SyntaxFactory.Argument((ExpressionSyntax) Visit(collection)) }.Concat(arguments.Arguments.Skip(1))));
+            return SyntaxFactory.InvocationExpression(SyntaxFactory.IdentifierName(functionName), CreateArguments(new[] { SyntaxFactory.Argument((ExpressionSyntax)Visit(collection)) }.Concat(arguments.Arguments.Skip(1))));
 
         }
 
