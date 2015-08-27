@@ -29,41 +29,40 @@ namespace RoslynLinqRewrite
                     if (lambda != null)
                     {
                         lastId++;
-                        
-                        var MainName = "Any" + lastId;
+
 
                         var isStatic = semantic.GetDeclaredSymbol(node.FirstAncestorOrSelf<MethodDeclarationSyntax>()).IsStatic;
 
                         var arg = (lambda as SimpleLambdaExpressionSyntax)?.Parameter ?? ((ParenthesizedLambdaExpressionSyntax)lambda).ParameterList.Parameters.Single();
-                        var body = lambda.Body;
                         var itemType = semantic.GetDeclaredSymbol(arg).Type;
 
-                        var flow = semantic.AnalyzeDataFlow(body);
+                        var flow = semantic.AnalyzeDataFlow(lambda.Body);
 
-                        string itemArg;
-                        var arguments = CreateArguments(new[] { SyntaxFactory.Argument(SyntaxFactory.IdentifierName(ItemName)) }.Concat(flow.Captured.Select(x => SyntaxFactory.Argument(SyntaxFactory.IdentifierName(x.Name)).WithRef(flow.WrittenInside.Contains(x)))));
-                        var foreachBody = SyntaxFactory.IfStatement(
-                            InlineOrCreateMethod((CSharpSyntaxNode)Visit(body), arguments, flow, CreateParameter(arg.Identifier, itemType), isStatic, out itemArg),
-                            SyntaxFactory.ReturnStatement(SyntaxFactory.LiteralExpression(SyntaxKind.TrueLiteralExpression))
-                            );
+
 
                         var collection = ((MemberAccessExpressionSyntax)node.Expression).Expression;
-                        var loop = SyntaxFactory.ForEachStatement(SyntaxFactory.IdentifierName("var"), itemArg, SyntaxFactory.IdentifierName(ItemsName), foreachBody)
-                            .NormalizeWhitespace();
 
-                        RewriteAsLoop(
-                            MainName,
+                        string itemArg = null;
+                        return RewriteAsLoop(
+                            "Any" + lastId,
                             new[] { CreateParameter(ItemsName, semantic.GetTypeInfo(collection).Type) }.Concat(flow.Captured.Select(x => CreateParameter(x.Name, GetSymbolType(x)).WithRef(flow.WrittenInside.Contains(x)))),
                             CreatePrimitiveType(SyntaxKind.BoolKeyword),
                             Enumerable.Empty<StatementSyntax>(),
-                            foreachBody,
+                            arguments =>
+                            {
+                                return SyntaxFactory.IfStatement(
+                                 InlineOrCreateMethod((CSharpSyntaxNode)Visit(lambda.Body), arguments, flow, CreateParameter(arg.Identifier, itemType), isStatic, out itemArg),
+                                 SyntaxFactory.ReturnStatement(SyntaxFactory.LiteralExpression(SyntaxKind.TrueLiteralExpression))
+                             );
+                            },
                             new[] { SyntaxFactory.ReturnStatement(SyntaxFactory.LiteralExpression(SyntaxKind.FalseLiteralExpression)) },
                             isStatic,
-                            itemArg
+                            () => itemArg,
+                            collection,
+                            flow
                         );
-                        
 
-                        node = SyntaxFactory.InvocationExpression(SyntaxFactory.IdentifierName(MainName), CreateArguments(new[] { SyntaxFactory.Argument(collection) }.Concat(arguments.Arguments.Skip(1))));
+
                     }
                 }
             }
@@ -72,14 +71,17 @@ namespace RoslynLinqRewrite
         }
         const string ItemsName = "theitems";
         const string ItemName = "theitem";
-        private void RewriteAsLoop(string functionName, IEnumerable<ParameterSyntax> parameters, TypeSyntax returnType, IEnumerable<StatementSyntax> prologue, StatementSyntax loopBody, IEnumerable<StatementSyntax> epilogue, bool isStatic, string loopVariable)
+        private ExpressionSyntax RewriteAsLoop(string functionName, IEnumerable<ParameterSyntax> parameters, TypeSyntax returnType, IEnumerable<StatementSyntax> prologue, Func<ArgumentListSyntax, StatementSyntax> loopBody, IEnumerable<StatementSyntax> epilogue, bool isStatic, Func<string> loopVariable, ExpressionSyntax collection, DataFlowAnalysis flow)
         {
+            var arguments = CreateArguments(new[] { SyntaxFactory.Argument(SyntaxFactory.IdentifierName(ItemName)) }.Concat(flow.Captured.Select(x => SyntaxFactory.Argument(SyntaxFactory.IdentifierName(x.Name)).WithRef(flow.WrittenInside.Contains(x)))));
+
             var foreachBody = loopBody;
+            var body = foreachBody(arguments);
             var loop = SyntaxFactory.ForEachStatement(
                 SyntaxFactory.IdentifierName("var"),
-                loopVariable, 
+                loopVariable(),
                 SyntaxFactory.IdentifierName(ItemsName),
-                foreachBody);
+                body);
             var coreFunction = SyntaxFactory.MethodDeclaration(returnType, functionName)
                         .WithParameterList(CreateParameters(parameters))
                         .WithBody(SyntaxFactory.Block(prologue.Concat(new[] {
@@ -88,6 +90,10 @@ namespace RoslynLinqRewrite
                         .WithStatic(isStatic)
                         .NormalizeWhitespace();
             methodsToAddToCurrentType.Add(coreFunction);
+
+
+            return SyntaxFactory.InvocationExpression(SyntaxFactory.IdentifierName(functionName), CreateArguments(new[] { SyntaxFactory.Argument(collection) }.Concat(arguments.Arguments.Skip(1))));
+
         }
 
         private static PredefinedTypeSyntax CreatePrimitiveType(SyntaxKind boolKeyword)
@@ -113,7 +119,7 @@ namespace RoslynLinqRewrite
         private ExpressionSyntax InlineOrCreateMethod(CSharpSyntaxNode body, ArgumentListSyntax arguments, DataFlowAnalysis flow, ParameterSyntax arg, bool isStatic, out string itemArg)
         {
             var fn = "Check" + lastId;
-            
+
             if (body is ExpressionSyntax)
             {
                 itemArg = arg.Identifier.ValueText;
