@@ -29,11 +29,10 @@ namespace RoslynLinqRewrite
                     if (lambda != null)
                     {
                         lastId++;
-                        var CheckFunctionName = "Check" + lastId;
-                        var CounterVariableName = "found1";
-                        var ItemName = "item1";
-                        var MainName = "Any" + lastId;
                         
+                        var MainName = "Any" + lastId;
+
+                        var isStatic = semantic.GetDeclaredSymbol(node.FirstAncestorOrSelf<MethodDeclarationSyntax>()).IsStatic;
 
                         var arg = (lambda as SimpleLambdaExpressionSyntax)?.Parameter ?? ((ParenthesizedLambdaExpressionSyntax)lambda).ParameterList.Parameters.Single();
                         var body = lambda.Body;
@@ -41,23 +40,16 @@ namespace RoslynLinqRewrite
 
                         var flow = semantic.AnalyzeDataFlow(body);
 
-                        var found = CreateLocalVariableDeclaration(CounterVariableName, SyntaxFactory.IdentifierName("false"));
-
-                        MethodDeclarationSyntax checkFunction;
+                        string itemArg;
                         var arguments = CreateArguments(new[] { SyntaxFactory.Argument(SyntaxFactory.IdentifierName(ItemName)) }.Concat(flow.Captured.Select(x => SyntaxFactory.Argument(SyntaxFactory.IdentifierName(x.Name)).WithRef(flow.WrittenInside.Contains(x)))));
                         var foreachBody = SyntaxFactory.IfStatement(
-                            InlineOrCreateMethod((CSharpSyntaxNode)Visit(body), out checkFunction, arguments, flow, CreateParameter(arg.Identifier, itemType)),
+                            InlineOrCreateMethod((CSharpSyntaxNode)Visit(body), arguments, flow, CreateParameter(arg.Identifier, itemType), isStatic, out itemArg),
                             SyntaxFactory.ReturnStatement(SyntaxFactory.LiteralExpression(SyntaxKind.TrueLiteralExpression))
                             );
 
                         var collection = ((MemberAccessExpressionSyntax)node.Expression).Expression;
-                        var loop = SyntaxFactory.ForEachStatement(SyntaxFactory.IdentifierName("var"), checkFunction == null ? semantic.GetDeclaredSymbol(arg).Name : ItemName, SyntaxFactory.IdentifierName(ItemsName), foreachBody)
+                        var loop = SyntaxFactory.ForEachStatement(SyntaxFactory.IdentifierName("var"), itemArg, SyntaxFactory.IdentifierName(ItemsName), foreachBody)
                             .NormalizeWhitespace();
-
-                        if (checkFunction != null)
-                            checkFunction = checkFunction
-                                .WithStatic(semantic.GetDeclaredSymbol(node.FirstAncestorOrSelf<MethodDeclarationSyntax>()).IsStatic)
-                                .NormalizeWhitespace();
 
                         RewriteAsLoop(
                             MainName,
@@ -66,13 +58,10 @@ namespace RoslynLinqRewrite
                             Enumerable.Empty<StatementSyntax>(),
                             foreachBody,
                             new[] { SyntaxFactory.ReturnStatement(SyntaxFactory.LiteralExpression(SyntaxKind.FalseLiteralExpression)) },
-                            semantic.GetDeclaredSymbol(node.FirstAncestorOrSelf<MethodDeclarationSyntax>()).IsStatic,
-                            checkFunction == null ? semantic.GetDeclaredSymbol(arg).Name : ItemName
+                            isStatic,
+                            itemArg
                         );
-
-                        if (checkFunction != null)
-                            methodsToAddToCurrentType.Add(checkFunction);
-
+                        
 
                         node = SyntaxFactory.InvocationExpression(SyntaxFactory.IdentifierName(MainName), CreateArguments(new[] { SyntaxFactory.Argument(collection) }.Concat(arguments.Arguments.Skip(1))));
                     }
@@ -82,6 +71,7 @@ namespace RoslynLinqRewrite
             return base.VisitInvocationExpression(node);
         }
         const string ItemsName = "theitems";
+        const string ItemName = "theitem";
         private void RewriteAsLoop(string functionName, IEnumerable<ParameterSyntax> parameters, TypeSyntax returnType, IEnumerable<StatementSyntax> prologue, StatementSyntax loopBody, IEnumerable<StatementSyntax> epilogue, bool isStatic, string loopVariable)
         {
             var foreachBody = loopBody;
@@ -120,27 +110,30 @@ namespace RoslynLinqRewrite
             return changed;
         }
 
-        private ExpressionSyntax InlineOrCreateMethod(CSharpSyntaxNode body, out MethodDeclarationSyntax method, ArgumentListSyntax arguments, DataFlowAnalysis flow, ParameterSyntax arg)
+        private ExpressionSyntax InlineOrCreateMethod(CSharpSyntaxNode body, ArgumentListSyntax arguments, DataFlowAnalysis flow, ParameterSyntax arg, bool isStatic, out string itemArg)
         {
             var fn = "Check" + lastId;
-
-            method = null;
+            
             if (body is ExpressionSyntax)
             {
+                itemArg = arg.Identifier.ValueText;
                 return (ExpressionSyntax)body;
             }
             else
             {
-                method = SyntaxFactory.MethodDeclaration(CreatePrimitiveType(SyntaxKind.BoolKeyword), fn)
+                itemArg = ItemName;
+                var method = SyntaxFactory.MethodDeclaration(CreatePrimitiveType(SyntaxKind.BoolKeyword), fn)
                                 .WithParameterList(SyntaxFactory.ParameterList(SyntaxFactory.SeparatedList(
                                     new[] {
                                     arg
                                     }.Union(flow.Captured.Select(x => CreateParameter(x.Name, GetSymbolType(x)).WithRef(flow.WrittenInside.Contains(x))))
                                  )))
-                                .WithBody(body as BlockSyntax ?? (body is StatementSyntax ? SyntaxFactory.Block((StatementSyntax)body) : SyntaxFactory.Block(SyntaxFactory.ReturnStatement((ExpressionSyntax)body))));
+                                .WithBody(body as BlockSyntax ?? (body is StatementSyntax ? SyntaxFactory.Block((StatementSyntax)body) : SyntaxFactory.Block(SyntaxFactory.ReturnStatement((ExpressionSyntax)body))))
+                                .WithStatic(isStatic)
+                                .NormalizeWhitespace();
 
 
-
+                methodsToAddToCurrentType.Add(method);
                 return SyntaxFactory.InvocationExpression(SyntaxFactory.IdentifierName(fn), arguments);
             }
         }
