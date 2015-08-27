@@ -16,6 +16,15 @@ namespace RoslynLinqRewrite
         }
 
 
+
+        private delegate bool IsMethodSequenceDelegate(
+            string p0,
+            string p1 = null,
+            string p2 = null,
+            string p3 = null,
+            string p4 = null,
+            string p5 = null
+            );
         public override SyntaxNode VisitInvocationExpression(InvocationExpressionSyntax node)
         {
 
@@ -34,12 +43,57 @@ namespace RoslynLinqRewrite
 
                     var itemType = collectionType is IArrayTypeSymbol ? ((IArrayTypeSymbol)collectionType).ElementType : collectionType.AllInterfaces.Concat(new[] { collectionType }).OfType<INamedTypeSymbol>().First(x => x.IsGenericType && x.ConstructUnboundGenericType().ToString() == "System.Collections.Generic.IEnumerable<>").TypeArguments.First();
                     var dataFlow = lambda != null ? semantic.AnalyzeDataFlow(lambda.Body) : null;
+                    var chain = new List<InvocationExpressionSyntax>();
+                    chain.Add(node);
+                    var c = node;
+                    while (c.Expression is MemberAccessExpressionSyntax)
+                    {
+                        c = ((MemberAccessExpressionSyntax)c.Expression).Expression as InvocationExpressionSyntax;
+                        if (c != null) chain.Add(c);
+                        else break;
+                    }
+                    var methodNames = Enumerable.Range(0, 5).Select(x => x < chain.Count ? GetMethodFullName(chain[x]) : null).ToList();
+                    IsMethodSequenceDelegate IsMethodSequence = (p0, p1, p2, p3, p4, p5) =>
+                    {
+                        if (p0 != null && methodNames[0] != p0) return false;
+                        if (p1 != null && methodNames[1] != p1) return false;
+                        if (p2 != null && methodNames[2] != p2) return false;
+                        if (p3 != null && methodNames[3] != p3) return false;
+                        if (p4 != null && methodNames[4] != p4) return false;
+                        if (p5 != null && methodNames[5] != p5) return false;
+
+                        return true;
+                    };
                     currentFlow = dataFlow?.Captured.Select(x => new VariableCapture(x, dataFlow.WrittenInside.Contains(x))) ?? Enumerable.Empty<VariableCapture>();
 
 
+                    
+
+                    if (IsMethodSequence(SumWithSelectorMethod, WhereMethod))
+                    {
+                        string itemArg = null;
+                        return RewriteAsLoop(
+                CreatePrimitiveType(SyntaxKind.IntKeyword),
+                new[] { CreateLocalVariableDeclaration("sum_", SyntaxFactory.LiteralExpression(SyntaxKind.NumericLiteralExpression, SyntaxFactory.Literal(0))) },
+                arguments =>
+                {
+                    return SyntaxFactory.IfStatement(
+                    InlineOrCreateMethod((CSharpSyntaxNode)Visit(lambda.Body), arguments, CreateParameter(arg.Identifier, itemType), out itemArg),
+                    SyntaxFactory.ExpressionStatement(SyntaxFactory.AssignmentExpression(SyntaxKind.AddAssignmentExpression, SyntaxFactory.IdentifierName("sum_"),
+                         InlineOrCreateMethod((CSharpSyntaxNode)Visit(lambda.Body), arguments, CreateParameter(arg.Identifier, itemType), out itemArg)))
+                         );
+
+                },
+                new[] { SyntaxFactory.ReturnStatement(SyntaxFactory.IdentifierName("sum_")) },
+                () => itemArg,
+                collection
+            );
+
+                    }
+
                     if (GetMethodFullName(node) == AnyWithConditionMethod)
                     {
-                      
+
 
                         string itemArg = null;
                         return RewriteAsLoop(
@@ -85,45 +139,22 @@ namespace RoslynLinqRewrite
 
 
 
-                        var innerInvocation = collection as InvocationExpressionSyntax;
-                        var innerMethodName = innerInvocation != null ? semantic.GetSymbolInfo(innerInvocation.Expression).Symbol : null;
-                        if (innerMethodName.Name == "Where")
-                        {
 
-                            return RewriteAsLoop(
-                                CreatePrimitiveType(SyntaxKind.IntKeyword),
-                                new[] { CreateLocalVariableDeclaration("sum_", SyntaxFactory.LiteralExpression(SyntaxKind.NumericLiteralExpression, SyntaxFactory.Literal(0))) },
-                                arguments =>
-                                {
-                                    return SyntaxFactory.IfStatement(
-                                    InlineOrCreateMethod((CSharpSyntaxNode)Visit(lambda.Body), arguments, CreateParameter(arg.Identifier, itemType), out itemArg),
-                                    SyntaxFactory.ExpressionStatement(SyntaxFactory.AssignmentExpression(SyntaxKind.AddAssignmentExpression, SyntaxFactory.IdentifierName("sum_"),
-                                         InlineOrCreateMethod((CSharpSyntaxNode)Visit(lambda.Body), arguments, CreateParameter(arg.Identifier, itemType), out itemArg)))
-                                         );
 
-                                },
-                                new[] { SyntaxFactory.ReturnStatement(SyntaxFactory.IdentifierName("sum_")) },
-                                () => itemArg,
-                                collection
-                            );
+                        return RewriteAsLoop(
+                           CreatePrimitiveType(SyntaxKind.IntKeyword),
+                           new[] { CreateLocalVariableDeclaration("sum_", SyntaxFactory.LiteralExpression(SyntaxKind.NumericLiteralExpression, SyntaxFactory.Literal(0))) },
+                           arguments =>
+                           {
+                               return SyntaxFactory.ExpressionStatement(SyntaxFactory.AssignmentExpression(SyntaxKind.AddAssignmentExpression, SyntaxFactory.IdentifierName("sum_"),
+                                    InlineOrCreateMethod((CSharpSyntaxNode)Visit(lambda.Body), arguments, CreateParameter(arg.Identifier, itemType), out itemArg)));
 
-                        }
-                        else
-                        {
-                            return RewriteAsLoop(
-                               CreatePrimitiveType(SyntaxKind.IntKeyword),
-                               new[] { CreateLocalVariableDeclaration("sum_", SyntaxFactory.LiteralExpression(SyntaxKind.NumericLiteralExpression, SyntaxFactory.Literal(0))) },
-                               arguments =>
-                               {
-                                   return SyntaxFactory.ExpressionStatement(SyntaxFactory.AssignmentExpression(SyntaxKind.AddAssignmentExpression, SyntaxFactory.IdentifierName("sum_"),
-                                        InlineOrCreateMethod((CSharpSyntaxNode)Visit(lambda.Body), arguments, CreateParameter(arg.Identifier, itemType), out itemArg)));
+                           },
+                           new[] { SyntaxFactory.ReturnStatement(SyntaxFactory.IdentifierName("sum_")) },
+                           () => itemArg,
+                           collection
+                       );
 
-                               },
-                               new[] { SyntaxFactory.ReturnStatement(SyntaxFactory.IdentifierName("sum_")) },
-                               () => itemArg,
-                               collection
-                           );
-                        }
 
 
                     }
