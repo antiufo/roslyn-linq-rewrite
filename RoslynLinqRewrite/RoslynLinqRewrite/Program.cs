@@ -12,6 +12,7 @@ namespace RoslynLinqRewrite
         static void Main(string[] args)
         {
             var code = @"
+using System;
 using System.Linq;
 
 class Meow
@@ -23,7 +24,7 @@ class Meow
         var capture = 5;
         var lol = 3;
         //const int c = 2;
-        var k = arr.Any(x =>{return x > capture++ + Meeeow-- + lol;});
+        var k = arr.Any(x =>{return x > capture++ + Meeeow-- + Convert.ToInt32( arr.Any(y=>y>5)) + lol;});
     }
 }
 ";

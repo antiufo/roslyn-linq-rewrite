@@ -46,7 +46,7 @@ namespace RoslynLinqRewrite
                         MethodDeclarationSyntax checkFunction;
                         var arguments = CreateArguments(new[] { SyntaxFactory.Argument(SyntaxFactory.IdentifierName(ItemName)) }.Concat(flow.Captured.Select(x => SyntaxFactory.Argument(SyntaxFactory.IdentifierName(x.Name)).WithRef(flow.WrittenInside.Contains(x)))));
                         var foreachBody = SyntaxFactory.IfStatement(
-                            InlineOrCreateMethod(body, out checkFunction, arguments, flow, CreateParameter(arg.Identifier, itemType))
+                            InlineOrCreateMethod((CSharpSyntaxNode)Visit(body), out checkFunction, arguments, flow, CreateParameter(arg.Identifier, itemType))
                             ,
                             //SyntaxFactory.Block(SyntaxFactory.ExpressionStatement(SyntaxFactory.AssignmentExpression(SyntaxKind.SimpleAssignmentExpression, SyntaxFactory.IdentifierName(CounterVariableName), SyntaxFactory.IdentifierName("true"))), SyntaxFactory.BreakStatement())
                             SyntaxFactory.ReturnStatement(SyntaxFactory.LiteralExpression(SyntaxKind.TrueLiteralExpression))
@@ -72,7 +72,7 @@ namespace RoslynLinqRewrite
                             methodsToAddToCurrentType.Add(checkFunction);
 
 
-                        return SyntaxFactory.InvocationExpression(SyntaxFactory.IdentifierName(MainName), CreateArguments(new[] { SyntaxFactory.Argument(collection) }.Concat(arguments.Arguments.Skip(1))));
+                        node = SyntaxFactory.InvocationExpression(SyntaxFactory.IdentifierName(MainName), CreateArguments(new[] { SyntaxFactory.Argument(collection) }.Concat(arguments.Arguments.Skip(1))));
                     }
                 }
             }
