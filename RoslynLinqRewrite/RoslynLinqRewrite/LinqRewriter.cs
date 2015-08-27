@@ -89,7 +89,7 @@ namespace RoslynLinqRewrite
                             (itemName, arguments) =>
                             {
                                 return CreateProcessingStep(chain, chain.Count - 1, itemType, ItemName, arguments,
-                                    x => SyntaxFactory.ExpressionStatement(SyntaxFactory.AssignmentExpression(SyntaxKind.AddAssignmentExpression, SyntaxFactory.IdentifierName("sum_"), x))
+                                    x => SyntaxFactory.ExpressionStatement(SyntaxFactory.AssignmentExpression(SyntaxKind.AddAssignmentExpression, SyntaxFactory.IdentifierName("sum_"), SyntaxFactory.IdentifierName(x)))
                                     );
                             },
                             new[] { SyntaxFactory.ReturnStatement(SyntaxFactory.IdentifierName("sum_")) },
@@ -104,7 +104,7 @@ namespace RoslynLinqRewrite
                             Enumerable.Empty<StatementSyntax>(),
                             (itemName, arguments) => CreateProcessingStep(chain, chain.Count - 1, itemType, ItemName, arguments, x =>
                             {
-                                var lambda = RenameSymbol((LambdaExpressionSyntax)firstArg, 0, itemName);
+                                var lambda = RenameSymbol((LambdaExpressionSyntax)firstArg, 0, x);
                                 return SyntaxFactory.IfStatement(InlineOrCreateMethod((CSharpSyntaxNode)Visit(lambda.Body), arguments, CreateParameter(itemName, itemType)),
                                  SyntaxFactory.ReturnStatement(SyntaxFactory.LiteralExpression(SyntaxKind.TrueLiteralExpression)
                                  ));
@@ -214,7 +214,7 @@ namespace RoslynLinqRewrite
             return base.VisitInvocationExpression(node);
         }
 
-        private StatementSyntax CreateProcessingStep(List<InvocationExpressionSyntax> chain, int chainIndex, ITypeSymbol itemType, string itemName, ArgumentListSyntax arguments, Func<ExpressionSyntax, StatementSyntax> finalStatement)
+        private StatementSyntax CreateProcessingStep(List<InvocationExpressionSyntax> chain, int chainIndex, ITypeSymbol itemType, string itemName, ArgumentListSyntax arguments, Func<string, StatementSyntax> finalStatement)
         {
             var invocationExpressionSyntax = chain[chainIndex];
             var method = GetMethodFullName(invocationExpressionSyntax);
@@ -226,7 +226,7 @@ namespace RoslynLinqRewrite
 
                 lambda = RenameSymbol(lambda, 0, itemName);
                 var check = InlineOrCreateMethod(lambda.Body, arguments, CreateParameter(itemName, itemType));
-                var next = chainIndex == 1 ? finalStatement(SyntaxFactory.IdentifierName(itemName)) : CreateProcessingStep(chain, chainIndex - 1, itemType, itemName, arguments, finalStatement);
+                var next = chainIndex == 1 ? finalStatement(itemName) : CreateProcessingStep(chain, chainIndex - 1, itemType, itemName, arguments, finalStatement);
                 return SyntaxFactory.IfStatement(check, next is BlockSyntax ? next : SyntaxFactory.Block(next));
             }
 
@@ -240,7 +240,7 @@ namespace RoslynLinqRewrite
                 var local = CreateLocalVariableDeclaration(newname, InlineOrCreateMethod(lambda.Body, arguments, CreateParameter(itemName, itemType)));
 
 
-                var next = chainIndex == 1 ? finalStatement(SyntaxFactory.IdentifierName(newname)) : CreateProcessingStep(chain, chainIndex - 1, itemType, newname, arguments, finalStatement);
+                var next = chainIndex == 1 ? finalStatement(newname) : CreateProcessingStep(chain, chainIndex - 1, itemType, newname, arguments, finalStatement);
                 var nexts = next is BlockSyntax ? ((BlockSyntax)next).Statements : (IEnumerable<StatementSyntax>)new[] { next };
                 return SyntaxFactory.Block(new[] { local }.Concat(nexts));
             }
