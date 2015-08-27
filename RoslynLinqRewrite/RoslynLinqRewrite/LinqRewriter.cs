@@ -27,11 +27,15 @@ namespace RoslynLinqRewrite
 
                 if (symbol.ContainingType.ToString() == "System.Linq.Enumerable")
                 {
-                    var lambda = node.ArgumentList.Arguments.FirstOrDefault().Expression as LambdaExpressionSyntax;
-                    var arg = (lambda as SimpleLambdaExpressionSyntax)?.Parameter ?? (lambda as ParenthesizedLambdaExpressionSyntax).ParameterList.Parameters.FirstOrDefault();
-                    var itemType = arg != null ? semantic.GetDeclaredSymbol(arg).Type : null;
-                    var flow = lambda != null ? semantic.AnalyzeDataFlow(lambda.Body) : null;
+                    var lambda = node.ArgumentList.Arguments.FirstOrDefault()?.Expression as LambdaExpressionSyntax;
+                    var arg = (lambda as SimpleLambdaExpressionSyntax)?.Parameter ?? (lambda as ParenthesizedLambdaExpressionSyntax)?.ParameterList.Parameters.FirstOrDefault();
                     var collection = ((MemberAccessExpressionSyntax)node.Expression).Expression;
+                    var collectionType = semantic.GetTypeInfo(collection).Type;
+
+                    var itemType = collectionType is IArrayTypeSymbol ? ((IArrayTypeSymbol)collectionType).ElementType : collectionType.AllInterfaces.Concat(new[] { collectionType }).OfType<INamedTypeSymbol>().First(x => x.IsGenericType && x.ConstructUnboundGenericType().ToString() == "System.Collections.Generic.IEnumerable<>").TypeArguments.First();
+                    var dataFlow = lambda != null ? semantic.AnalyzeDataFlow(lambda.Body) : null;
+                    var flow = dataFlow?.Captured.Select(x => new VariableCapture(x, dataFlow.WrittenInside.Contains(x))) ?? Enumerable.Empty<VariableCapture>();
+
 
                     if (symbol?.Name == "Any" && lambda != null && arg != null)
                     {
@@ -40,7 +44,7 @@ namespace RoslynLinqRewrite
                         string itemArg = null;
                         return RewriteAsLoop(
                             "Any" + lastId,
-                            new[] { CreateParameter(ItemsName, semantic.GetTypeInfo(collection).Type) }.Concat(flow.Captured.Select(x => CreateParameter(x.Name, GetSymbolType(x)).WithRef(flow.WrittenInside.Contains(x)))),
+                            new[] { CreateParameter(ItemsName, semantic.GetTypeInfo(collection).Type) }.Concat(flow.Select(x => CreateParameter(x.Name, GetSymbolType(x.Symbol)).WithRef(x.Changes))),
                             CreatePrimitiveType(SyntaxKind.BoolKeyword),
                             Enumerable.Empty<StatementSyntax>(),
                             arguments =>
@@ -57,164 +61,234 @@ namespace RoslynLinqRewrite
                             flow
                         );
                     }
-                    if (symbol?.Name == "Sum" && lambda != null && arg != null)
+
+                    if (symbol?.Name == "Where" && lambda != null && arg != null)
                     {
                         lastId++;
 
                         string itemArg = null;
                         return RewriteAsLoop(
-                            "Sum" + lastId,
-                            new[] { CreateParameter(ItemsName, semantic.GetTypeInfo(collection).Type) }.Concat(flow.Captured.Select(x => CreateParameter(x.Name, GetSymbolType(x)).WithRef(flow.WrittenInside.Contains(x)))),
-                            CreatePrimitiveType(SyntaxKind.IntKeyword),
-                            new[] { CreateLocalVariableDeclaration("sum_", SyntaxFactory.LiteralExpression(SyntaxKind.NumericLiteralExpression, SyntaxFactory.Literal(0)))},
+                            "Where" + lastId,
+                            new[] { CreateParameter(ItemsName, semantic.GetTypeInfo(collection).Type) }.Concat(flow.Select(x => CreateParameter(x.Name, GetSymbolType(x.Symbol)).WithRef(x.Changes))),
+                            SyntaxFactory.ParseTypeName("System.Collections.Generic.IEnumerable<" + itemType.ToDisplayString() + ">"),
+                            Enumerable.Empty<StatementSyntax>(),
                             arguments =>
                             {
-                                return SyntaxFactory.ExpressionStatement(SyntaxFactory.AssignmentExpression(SyntaxKind.AddAssignmentExpression, SyntaxFactory.IdentifierName("sum_"),
-                                     InlineOrCreateMethod((CSharpSyntaxNode)Visit(lambda.Body), arguments, flow, CreateParameter(arg.Identifier, itemType), isStatic, out itemArg)));
-
+                                return SyntaxFactory.IfStatement(
+                                 InlineOrCreateMethod((CSharpSyntaxNode)Visit(lambda.Body), arguments, flow, CreateParameter(arg.Identifier, itemType), isStatic, out itemArg),
+                                 SyntaxFactory.YieldStatement(SyntaxKind.YieldReturnStatement, SyntaxFactory.IdentifierName(arg.Identifier))
+                             );
                             },
-                            new[] { SyntaxFactory.ReturnStatement(SyntaxFactory.IdentifierName("sum_")) },
+                            Enumerable.Empty<StatementSyntax>(),
                             isStatic,
                             () => itemArg,
                             collection,
                             flow
                         );
-                }
+                    }
 
+                    if (symbol?.Name == "Sum")
+                    {
+                        lastId++;
+
+                        string itemArg = null;
+                        if (lambda != null)
+                        {
+                            return RewriteAsLoop(
+                                "Sum" + lastId,
+                                new[] { CreateParameter(ItemsName, semantic.GetTypeInfo(collection).Type) }.Concat(flow.Select(x => CreateParameter(x.Name, GetSymbolType(x.Symbol)).WithRef(x.Changes))),
+                                CreatePrimitiveType(SyntaxKind.IntKeyword),
+                                new[] { CreateLocalVariableDeclaration("sum_", SyntaxFactory.LiteralExpression(SyntaxKind.NumericLiteralExpression, SyntaxFactory.Literal(0))) },
+                                arguments =>
+                                {
+                                    return SyntaxFactory.ExpressionStatement(SyntaxFactory.AssignmentExpression(SyntaxKind.AddAssignmentExpression, SyntaxFactory.IdentifierName("sum_"),
+                                         InlineOrCreateMethod((CSharpSyntaxNode)Visit(lambda.Body), arguments, flow, CreateParameter(arg.Identifier, itemType), isStatic, out itemArg)));
+
+                                },
+                                new[] { SyntaxFactory.ReturnStatement(SyntaxFactory.IdentifierName("sum_")) },
+                                isStatic,
+                                () => itemArg,
+                                collection,
+                                flow
+                            );
+                        }
+                        else
+                        {
+                            return RewriteAsLoop(
+                                "Sum" + lastId,
+                                new[] { CreateParameter(ItemsName, semantic.GetTypeInfo(collection).Type) }.Concat(flow.Select(x => CreateParameter(x.Name, GetSymbolType(x)).WithRef(x.Changes))),
+                                CreatePrimitiveType(SyntaxKind.IntKeyword),
+                                new[] { CreateLocalVariableDeclaration("sum_", SyntaxFactory.LiteralExpression(SyntaxKind.NumericLiteralExpression, SyntaxFactory.Literal(0))) },
+                                arguments =>
+                                {
+                                    return SyntaxFactory.ExpressionStatement(SyntaxFactory.AssignmentExpression(SyntaxKind.AddAssignmentExpression, SyntaxFactory.IdentifierName("sum_"),
+                                         InlineOrCreateMethod(SyntaxFactory.IdentifierName(ItemName), arguments, flow, CreateParameter(ItemName, itemType), isStatic, out itemArg)));
+
+                                },
+                                new[] { SyntaxFactory.ReturnStatement(SyntaxFactory.IdentifierName("sum_")) },
+                                isStatic,
+                                () => itemArg,
+                                collection,
+                                flow
+                            );
+                        }
+                    }
+
+                }
+            }
+
+            return base.VisitInvocationExpression(node);
+        }
+
+        ITypeSymbol GetSymbolType(VariableCapture x)
+        {
+            return GetSymbolType(x.Symbol);
+        }
+
+        const string ItemsName = "theitems";
+        const string ItemName = "theitem";
+        private class VariableCapture
+
+        {
+            public VariableCapture(ISymbol symbol, bool changes)
+            {
+                this.Symbol = symbol;
+                this.Changes = changes;
+            }
+            public ISymbol Symbol { get; }
+            public bool Changes { get; }
+            public string Name
+            {
+                get { return Symbol.Name; }
+            }
+        }
+        private ExpressionSyntax RewriteAsLoop(string functionName, IEnumerable<ParameterSyntax> parameters, TypeSyntax returnType, IEnumerable<StatementSyntax> prologue, Func<ArgumentListSyntax, StatementSyntax> loopBody, IEnumerable<StatementSyntax> epilogue, bool isStatic, Func<string> loopVariable, ExpressionSyntax collection, IEnumerable<VariableCapture> flow)
+        {
+            var arguments = CreateArguments(new[] { SyntaxFactory.Argument(SyntaxFactory.IdentifierName(ItemName)) }.Concat(flow.Select(x => SyntaxFactory.Argument(SyntaxFactory.IdentifierName(x.Name)).WithRef(x.Changes))));
+
+            var foreachBody = loopBody;
+            var body = foreachBody(arguments);
+            var loop = SyntaxFactory.ForEachStatement(
+                SyntaxFactory.IdentifierName("var"),
+                loopVariable(),
+                SyntaxFactory.IdentifierName(ItemsName),
+                body);
+            var coreFunction = SyntaxFactory.MethodDeclaration(returnType, functionName)
+                        .WithParameterList(CreateParameters(parameters))
+                        .WithBody(SyntaxFactory.Block(prologue.Concat(new[] {
+                            loop
+                        }).Concat(epilogue)))
+                        .WithStatic(isStatic)
+                        .NormalizeWhitespace();
+            methodsToAddToCurrentType.Add(coreFunction);
+
+
+            return SyntaxFactory.InvocationExpression(SyntaxFactory.IdentifierName(functionName), CreateArguments(new[] { SyntaxFactory.Argument((ExpressionSyntax) Visit(collection)) }.Concat(arguments.Arguments.Skip(1))));
+
+        }
+
+        private static PredefinedTypeSyntax CreatePrimitiveType(SyntaxKind boolKeyword)
+        {
+            return SyntaxFactory.PredefinedType(SyntaxFactory.Token(boolKeyword));
+        }
+
+        private List<MethodDeclarationSyntax> methodsToAddToCurrentType = new List<MethodDeclarationSyntax>();
+        private int lastId;
+
+        public override SyntaxNode VisitStructDeclaration(StructDeclarationSyntax node)
+        {
+            var changed = (StructDeclarationSyntax)base.VisitStructDeclaration(node);
+            if (methodsToAddToCurrentType.Count != 0)
+            {
+                var withMethods = changed.AddMembers(methodsToAddToCurrentType.ToArray());
+                methodsToAddToCurrentType.Clear();
+                return withMethods;
+            }
+            return changed;
+        }
+
+        private ExpressionSyntax InlineOrCreateMethod(CSharpSyntaxNode body, ArgumentListSyntax arguments, IEnumerable<VariableCapture> flow, ParameterSyntax arg, bool isStatic, out string itemArg)
+        {
+            var fn = "Check" + lastId;
+
+            if (body is ExpressionSyntax)
+            {
+                itemArg = arg.Identifier.ValueText;
+                return (ExpressionSyntax)body;
+            }
+            else
+            {
+                itemArg = ItemName;
+                var method = SyntaxFactory.MethodDeclaration(CreatePrimitiveType(SyntaxKind.BoolKeyword), fn)
+                                .WithParameterList(SyntaxFactory.ParameterList(SyntaxFactory.SeparatedList(
+                                    new[] {
+                                    arg
+                                    }.Union(flow.Select(x => CreateParameter(x.Name, GetSymbolType(x)).WithRef(x.Changes)))
+                                 )))
+                                .WithBody(body as BlockSyntax ?? (body is StatementSyntax ? SyntaxFactory.Block((StatementSyntax)body) : SyntaxFactory.Block(SyntaxFactory.ReturnStatement((ExpressionSyntax)body))))
+                                .WithStatic(isStatic)
+                                .NormalizeWhitespace();
+
+
+                methodsToAddToCurrentType.Add(method);
+                return SyntaxFactory.InvocationExpression(SyntaxFactory.IdentifierName(fn), arguments);
             }
         }
 
-            return base.VisitInvocationExpression(node);
-    }
-    const string ItemsName = "theitems";
-    const string ItemName = "theitem";
-    private ExpressionSyntax RewriteAsLoop(string functionName, IEnumerable<ParameterSyntax> parameters, TypeSyntax returnType, IEnumerable<StatementSyntax> prologue, Func<ArgumentListSyntax, StatementSyntax> loopBody, IEnumerable<StatementSyntax> epilogue, bool isStatic, Func<string> loopVariable, ExpressionSyntax collection, DataFlowAnalysis flow)
-    {
-        var arguments = CreateArguments(new[] { SyntaxFactory.Argument(SyntaxFactory.IdentifierName(ItemName)) }.Concat(flow.Captured.Select(x => SyntaxFactory.Argument(SyntaxFactory.IdentifierName(x.Name)).WithRef(flow.WrittenInside.Contains(x)))));
-
-        var foreachBody = loopBody;
-        var body = foreachBody(arguments);
-        var loop = SyntaxFactory.ForEachStatement(
-            SyntaxFactory.IdentifierName("var"),
-            loopVariable(),
-            SyntaxFactory.IdentifierName(ItemsName),
-            body);
-        var coreFunction = SyntaxFactory.MethodDeclaration(returnType, functionName)
-                    .WithParameterList(CreateParameters(parameters))
-                    .WithBody(SyntaxFactory.Block(prologue.Concat(new[] {
-                            loop
-                    }).Concat(epilogue)))
-                    .WithStatic(isStatic)
-                    .NormalizeWhitespace();
-        methodsToAddToCurrentType.Add(coreFunction);
-
-
-        return SyntaxFactory.InvocationExpression(SyntaxFactory.IdentifierName(functionName), CreateArguments(new[] { SyntaxFactory.Argument(collection) }.Concat(arguments.Arguments.Skip(1))));
-
-    }
-
-    private static PredefinedTypeSyntax CreatePrimitiveType(SyntaxKind boolKeyword)
-    {
-        return SyntaxFactory.PredefinedType(SyntaxFactory.Token(boolKeyword));
-    }
-
-    private List<MethodDeclarationSyntax> methodsToAddToCurrentType = new List<MethodDeclarationSyntax>();
-    private int lastId;
-
-    public override SyntaxNode VisitStructDeclaration(StructDeclarationSyntax node)
-    {
-        var changed = (StructDeclarationSyntax)base.VisitStructDeclaration(node);
-        if (methodsToAddToCurrentType.Count != 0)
+        public override SyntaxNode VisitClassDeclaration(ClassDeclarationSyntax node)
         {
-            var withMethods = changed.AddMembers(methodsToAddToCurrentType.ToArray());
-            methodsToAddToCurrentType.Clear();
-            return withMethods;
+            var changed = (ClassDeclarationSyntax)base.VisitClassDeclaration(node);
+            if (methodsToAddToCurrentType.Count != 0)
+            {
+                var withMethods = changed.AddMembers(methodsToAddToCurrentType.ToArray());
+                methodsToAddToCurrentType.Clear();
+                return withMethods.NormalizeWhitespace();
+            }
+            return changed;
         }
-        return changed;
-    }
 
-    private ExpressionSyntax InlineOrCreateMethod(CSharpSyntaxNode body, ArgumentListSyntax arguments, DataFlowAnalysis flow, ParameterSyntax arg, bool isStatic, out string itemArg)
-    {
-        var fn = "Check" + lastId;
-
-        if (body is ExpressionSyntax)
+        private LocalDeclarationStatementSyntax CreateLocalVariableDeclaration(string name, ExpressionSyntax value)
         {
-            itemArg = arg.Identifier.ValueText;
-            return (ExpressionSyntax)body;
+            return SyntaxFactory.LocalDeclarationStatement(SyntaxFactory.VariableDeclaration(SyntaxFactory.IdentifierName("var"), CreateSeparatedList(new[] { SyntaxFactory.VariableDeclarator(name).WithInitializer(SyntaxFactory.EqualsValueClause(value)) })));
         }
-        else
+
+        private ITypeSymbol GetSymbolType(ISymbol x)
         {
-            itemArg = ItemName;
-            var method = SyntaxFactory.MethodDeclaration(CreatePrimitiveType(SyntaxKind.BoolKeyword), fn)
-                            .WithParameterList(SyntaxFactory.ParameterList(SyntaxFactory.SeparatedList(
-                                new[] {
-                                    arg
-                                }.Union(flow.Captured.Select(x => CreateParameter(x.Name, GetSymbolType(x)).WithRef(flow.WrittenInside.Contains(x))))
-                             )))
-                            .WithBody(body as BlockSyntax ?? (body is StatementSyntax ? SyntaxFactory.Block((StatementSyntax)body) : SyntaxFactory.Block(SyntaxFactory.ReturnStatement((ExpressionSyntax)body))))
-                            .WithStatic(isStatic)
-                            .NormalizeWhitespace();
+            var local = x as ILocalSymbol;
+            if (local != null) return local.Type;
 
+            var param = x as IParameterSymbol;
+            if (param != null) return param.Type;
 
-            methodsToAddToCurrentType.Add(method);
-            return SyntaxFactory.InvocationExpression(SyntaxFactory.IdentifierName(fn), arguments);
+            throw new NotImplementedException();
         }
-    }
-
-    public override SyntaxNode VisitClassDeclaration(ClassDeclarationSyntax node)
-    {
-        var changed = (ClassDeclarationSyntax)base.VisitClassDeclaration(node);
-        if (methodsToAddToCurrentType.Count != 0)
+        private static SeparatedSyntaxList<T> CreateSeparatedList<T>(IEnumerable<T> items) where T : SyntaxNode
         {
-            var withMethods = changed.AddMembers(methodsToAddToCurrentType.ToArray());
-            methodsToAddToCurrentType.Clear();
-            return withMethods.NormalizeWhitespace();
+            return SyntaxFactory.SeparatedList<T>(items);
         }
-        return changed;
-    }
-
-    private LocalDeclarationStatementSyntax CreateLocalVariableDeclaration(string name, ExpressionSyntax value)
-    {
-        return SyntaxFactory.LocalDeclarationStatement(SyntaxFactory.VariableDeclaration(SyntaxFactory.IdentifierName("var"), CreateSeparatedList(new[] { SyntaxFactory.VariableDeclarator(name).WithInitializer(SyntaxFactory.EqualsValueClause(value)) })));
-    }
-
-    private ITypeSymbol GetSymbolType(ISymbol x)
-    {
-        var local = x as ILocalSymbol;
-        if (local != null) return local.Type;
-
-        var param = x as IParameterSymbol;
-        if (param != null) return param.Type;
-
-        throw new NotImplementedException();
-    }
-    private static SeparatedSyntaxList<T> CreateSeparatedList<T>(IEnumerable<T> items) where T : SyntaxNode
-    {
-        return SyntaxFactory.SeparatedList<T>(items);
-    }
-    private static ArgumentListSyntax CreateArguments(IEnumerable<ExpressionSyntax> items)
-    {
-        return CreateArguments(items.Select(x => SyntaxFactory.Argument(x)));
-    }
-    private static ArgumentListSyntax CreateArguments(IEnumerable<ArgumentSyntax> items)
-    {
-        return SyntaxFactory.ArgumentList(CreateSeparatedList(items));
-    }
-    private static ParameterListSyntax CreateParameters(IEnumerable<ParameterSyntax> items)
-    {
-        return SyntaxFactory.ParameterList(CreateSeparatedList(items));
-    }
-    private static ParameterSyntax CreateParameter(SyntaxToken name, ITypeSymbol type)
-    {
-        return SyntaxFactory.Parameter(name).WithType(SyntaxFactory.ParseTypeName(type.ToDisplayString()));
-    }
-    private static ParameterSyntax CreateParameter(string name, ITypeSymbol type)
-    {
-        return CreateParameter(SyntaxFactory.Identifier(name), type);
-    }
+        private static ArgumentListSyntax CreateArguments(IEnumerable<ExpressionSyntax> items)
+        {
+            return CreateArguments(items.Select(x => SyntaxFactory.Argument(x)));
+        }
+        private static ArgumentListSyntax CreateArguments(IEnumerable<ArgumentSyntax> items)
+        {
+            return SyntaxFactory.ArgumentList(CreateSeparatedList(items));
+        }
+        private static ParameterListSyntax CreateParameters(IEnumerable<ParameterSyntax> items)
+        {
+            return SyntaxFactory.ParameterList(CreateSeparatedList(items));
+        }
+        private static ParameterSyntax CreateParameter(SyntaxToken name, ITypeSymbol type)
+        {
+            return SyntaxFactory.Parameter(name).WithType(SyntaxFactory.ParseTypeName(type.ToDisplayString()));
+        }
+        private static ParameterSyntax CreateParameter(string name, ITypeSymbol type)
+        {
+            return CreateParameter(SyntaxFactory.Identifier(name), type);
+        }
 
 
-}
+    }
 
 
 }
