@@ -49,7 +49,7 @@ namespace RoslynLinqRewrite
                     var collection = ((MemberAccessExpressionSyntax)node.Expression).Expression;
                     var collectionType = semantic.GetTypeInfo(collection).Type;
                     var firstArg = node.ArgumentList.Arguments.FirstOrDefault()?.Expression;
-                    var itemType = collectionType is IArrayTypeSymbol ? ((IArrayTypeSymbol)collectionType).ElementType : collectionType.AllInterfaces.Concat(new[] { collectionType }).OfType<INamedTypeSymbol>().First(x => x.IsGenericType && x.ConstructUnboundGenericType().ToString() == "System.Collections.Generic.IEnumerable<>").TypeArguments.First();
+                    //var itemType = collectionType is IArrayTypeSymbol ? ((IArrayTypeSymbol)collectionType).ElementType : collectionType.AllInterfaces.Concat(new[] { collectionType }).OfType<INamedTypeSymbol>().First(x => x.IsGenericType && x.ConstructUnboundGenericType().ToString() == "System.Collections.Generic.IEnumerable<>").TypeArguments.First();
                     var dataFlow = semantic.AnalyzeDataFlow(node);
                     var chain = new List<InvocationExpressionSyntax>();
                     chain.Add(node);
@@ -81,31 +81,31 @@ namespace RoslynLinqRewrite
                     var aggregationMethod = methodNames[0];
 
 
-                    if (aggregationMethod == SumIntsMethod)
-                    {
-                        return RewriteAsLoop(
-                            CreatePrimitiveType(SyntaxKind.IntKeyword),
-                            new[] { CreateLocalVariableDeclaration("sum_", SyntaxFactory.LiteralExpression(SyntaxKind.NumericLiteralExpression, SyntaxFactory.Literal(0))) },
-                            (itemName, arguments) =>
-                            {
-                                return CreateProcessingStep(chain, chain.Count - 1, itemType, ItemName, arguments,
-                                    x => SyntaxFactory.ExpressionStatement(SyntaxFactory.AssignmentExpression(SyntaxKind.AddAssignmentExpression, SyntaxFactory.IdentifierName("sum_"), SyntaxFactory.IdentifierName(x)))
-                                    );
-                            },
-                            new[] { SyntaxFactory.ReturnStatement(SyntaxFactory.IdentifierName("sum_")) },
-                            collection
-                        );
-                    }
+                    //if (aggregationMethod == SumIntsMethod)
+                    //{
+                    //    return RewriteAsLoop(
+                    //        CreatePrimitiveType(SyntaxKind.IntKeyword),
+                    //        new[] { CreateLocalVariableDeclaration("sum_", SyntaxFactory.LiteralExpression(SyntaxKind.NumericLiteralExpression, SyntaxFactory.Literal(0))) },
+                    //        (itemName, t, arguments) =>
+                    //        {
+                    //            return CreateProcessingStep(chain, chain.Count - 1, t, itemName, arguments,
+                    //                x => SyntaxFactory.ExpressionStatement(SyntaxFactory.AssignmentExpression(SyntaxKind.AddAssignmentExpression, SyntaxFactory.IdentifierName("sum_"), SyntaxFactory.IdentifierName(x)))
+                    //                );
+                    //        },
+                    //        new[] { SyntaxFactory.ReturnStatement(SyntaxFactory.IdentifierName("sum_")) },
+                    //        collection
+                    //    );
+                    //}
                     if (aggregationMethod == AnyWithConditionMethod)
                     {
-
+                        
                         return RewriteAsLoop(
                             CreatePrimitiveType(SyntaxKind.BoolKeyword),
                             Enumerable.Empty<StatementSyntax>(),
-                            (itemName, arguments) => CreateProcessingStep(chain, chain.Count - 1, itemType, ItemName, arguments, x =>
+                            (arguments) => CreateProcessingStep(chain, chain.Count - 1, t, itemName, arguments, x =>
                             {
                                 var lambda = RenameSymbol((LambdaExpressionSyntax)firstArg, 0, x);
-                                return SyntaxFactory.IfStatement(InlineOrCreateMethod((CSharpSyntaxNode)Visit(lambda.Body), arguments, CreateParameter(itemName, itemType)),
+                                return SyntaxFactory.IfStatement(InlineOrCreateMethod((CSharpSyntaxNode)Visit(lambda.Body), arguments, CreateParameter(itemName, t)),
                                  SyntaxFactory.ReturnStatement(SyntaxFactory.LiteralExpression(SyntaxKind.TrueLiteralExpression)
                                  ));
                             }), 
@@ -214,7 +214,7 @@ namespace RoslynLinqRewrite
             return base.VisitInvocationExpression(node);
         }
 
-        private StatementSyntax CreateProcessingStep(List<InvocationExpressionSyntax> chain, int chainIndex, ITypeSymbol itemType, string itemName, ArgumentListSyntax arguments, Func<string, StatementSyntax> finalStatement)
+        private StatementSyntax CreateProcessingStep(List<InvocationExpressionSyntax> chain, int chainIndex, TypeSyntax itemType, string itemName, ArgumentListSyntax arguments, Func<string, StatementSyntax> finalStatement)
         {
             var invocationExpressionSyntax = chain[chainIndex];
             var method = GetMethodFullName(invocationExpressionSyntax);
@@ -329,23 +329,23 @@ namespace RoslynLinqRewrite
 
 
 
-        private ExpressionSyntax RewriteAsLoop(TypeSyntax returnType, IEnumerable<StatementSyntax> prologue, Func<string, ArgumentListSyntax, StatementSyntax> loopBody, IEnumerable<StatementSyntax> epilogue, ExpressionSyntax collection)
+        private ExpressionSyntax RewriteAsLoop(TypeSyntax returnType, IEnumerable<StatementSyntax> prologue, Func<ArgumentListSyntax, StatementSyntax> loopBody, IEnumerable<StatementSyntax> epilogue, ExpressionSyntax collection)
         {
             var parameters = new[] { CreateParameter(ItemsName, semantic.GetTypeInfo(collection).Type) }.Concat(currentFlow.Select(x => CreateParameter(x.Name, GetSymbolType(x.Symbol)).WithRef(x.Changes)));
 
             var functionName = "ProceduralLinq" + ++lastId;
             var arguments = CreateArguments(new[] { SyntaxFactory.Argument(SyntaxFactory.IdentifierName(ItemName)) }.Concat(currentFlow.Select(x => SyntaxFactory.Argument(SyntaxFactory.IdentifierName(x.Name)).WithRef(x.Changes))));
 
-            var body = loopBody("aerr", arguments);
-            var loop = SyntaxFactory.ForEachStatement(
+            var loopContent = loopBody(arguments);
+            var foreachStatement = SyntaxFactory.ForEachStatement(
                 SyntaxFactory.IdentifierName("var"),
                 ItemName,
                 SyntaxFactory.IdentifierName(ItemsName),
-                SyntaxFactory.Block(body));
+                SyntaxFactory.Block(loopContent));
             var coreFunction = SyntaxFactory.MethodDeclaration(returnType, functionName)
                         .WithParameterList(CreateParameters(parameters))
                         .WithBody(SyntaxFactory.Block(prologue.Concat(new[] {
-                            loop
+                            foreachStatement
                         }).Concat(epilogue)))
                         .WithStatic(currentMethodIsStatic)
                         .NormalizeWhitespace();
@@ -451,7 +451,15 @@ namespace RoslynLinqRewrite
         {
             return SyntaxFactory.Parameter(name).WithType(SyntaxFactory.ParseTypeName(type.ToDisplayString()));
         }
+        private static ParameterSyntax CreateParameter(SyntaxToken name, TypeSyntax type)
+        {
+            return SyntaxFactory.Parameter(name).WithType(type);
+        }
         private static ParameterSyntax CreateParameter(string name, ITypeSymbol type)
+        {
+            return CreateParameter(SyntaxFactory.Identifier(name), type);
+        }
+        private static ParameterSyntax CreateParameter(string name, TypeSyntax type)
         {
             return CreateParameter(SyntaxFactory.Identifier(name), type);
         }
