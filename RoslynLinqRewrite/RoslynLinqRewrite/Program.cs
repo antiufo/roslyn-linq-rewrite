@@ -1,7 +1,9 @@
 ﻿using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.MSBuild;
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -12,6 +14,15 @@ namespace RoslynLinqRewrite
     {
         static void Main(string[] args)
         {
+            if (true)
+            {
+                //CompileSolution(@"D:\Repositories\shaman-fizzler\Fizzler.sln", "Fizzler");
+                CompileSolution(@"C:\Repositories\Awdee\Shaman.ApiServer.sln", "Shaman.Core");
+                return;
+            }
+
+
+
             var code = @"
 using System;
 using System.Linq;
@@ -21,10 +32,11 @@ class Meow
     static void Main()
     {
         var arr = new []{ 5, 457, 7464, 66 };
+        var arr2 = new []{ ""a"", ""b"" };
         var capture = 5;
         var meow = 2;
-//arr.Any(x=>x>50);
-         var k = arr/*.Where(x =>x > capture).Where(x =>x != 0)*/.Select(x =>{ return x * 3;}).Select(x => x - 4).Sum();
+var k = arr2.Where(x => x.StartsWith(""t"")).Select(x=>x==""miao"").LastOrDefault();
+         //var k = arr.Where(x =>x > capture).Where(x =>x != 0).Select(x =>{return (double)x - 4;}).Where(x => x < 99).Any(x => x == 100);
        // var ka = arr.Sum();
     }
 }
@@ -51,18 +63,67 @@ class Meow
                 Console.WriteLine(item);
             }
             var syntaxTree = doc.GetSyntaxTreeAsync().Result;
-            var rewriter = new LinqRewriter(proj, comp.GetSemanticModel(syntaxTree));
+            var rewriter = new LinqRewriter(proj, comp.GetSemanticModel(syntaxTree), doc.Id);
             var rewritten = rewriter.Visit(syntaxTree.GetRoot());
             proj = doc.WithSyntaxRoot(rewritten).Project;
-           // if (!workspace.TryApplyChanges(proj.Solution))
-          //      throw new Exception();
+            // if (!workspace.TryApplyChanges(proj.Solution))
+            //      throw new Exception();
 
             Console.WriteLine(rewritten.ToString());
-            
+
             foreach (var item in proj.GetCompilationAsync().Result.GetDiagnostics())
             {
                 Console.WriteLine(item);
             }
+        }
+
+        private static void CompileSolution(string path, string projectName)
+        {
+            var workspace = MSBuildWorkspace.Create();
+            Solution solution = null;
+            if (".csproj".Equals(Path.GetExtension(path), StringComparison.OrdinalIgnoreCase))
+            {
+                solution = workspace.OpenSolutionAsync(path).Result;
+            }
+            else
+            {
+                solution = workspace.OpenSolutionAsync(path).Result;
+            }
+            var project = solution.Projects.First(x => x.Name == projectName);
+
+            var comp = project.GetCompilationAsync().Result;
+
+            foreach (var item in comp.GetDiagnostics())
+            {
+                if (item.Severity != DiagnosticSeverity.Hidden)
+                    Console.WriteLine(item);
+            }
+            var updatedProject = project;
+            foreach (var doc in project.Documents.SkipWhile(x => x.Name != "FizzlerCustomSelectors.cs"))
+            {
+                Console.WriteLine(doc.FilePath);
+                var syntaxTree = doc.GetSyntaxTreeAsync().Result;
+
+                var rewriter = new LinqRewriter(project, comp.GetSemanticModel(syntaxTree), doc.Id);
+
+                var rewritten = rewriter.Visit(syntaxTree.GetRoot());
+                if (syntaxTree.ToString() != rewritten.SyntaxTree.ToString())
+                {
+                    //File.WriteAllText(@"C:\temp\roslynrewrite\" + doc.Name, rewritten.SyntaxTree.ToString(), Encoding.UTF8);
+                    File.WriteAllText(doc.FilePath, rewritten.SyntaxTree.ToString(), Encoding.UTF8);
+                    //Console.WriteLine(rewritten.ToString());
+                }
+                updatedProject = updatedProject.GetDocument(doc.Id).WithSyntaxRoot(rewritten).Project;
+
+            }
+            project = updatedProject;
+            var compilation = project.GetCompilationAsync().Result;
+            foreach (var item in compilation.GetDiagnostics())
+            {
+                if (item.Severity != DiagnosticSeverity.Hidden)
+                    Console.WriteLine(item);
+            }
+            compilation.Emit(@"C:\temp\roslynrewrite\" + project.AssemblyName + ".dll");
         }
     }
 }

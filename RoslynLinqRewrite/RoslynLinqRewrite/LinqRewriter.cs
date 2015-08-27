@@ -7,6 +7,7 @@ using Microsoft.CodeAnalysis.Rename;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -17,25 +18,52 @@ namespace RoslynLinqRewrite
         private SemanticModel semantic;
 
         private Project project;
-        public LinqRewriter(Project project, SemanticModel semantic)
+        public LinqRewriter(Project project, SemanticModel semantic, DocumentId docid)
         {
+            this.docid = docid;
             this.project = project;
             this.semantic = semantic;
         }
+        static LinqRewriter()
+        {
 
+            KnownMethods = typeof(LinqRewriter).GetFields(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static)
+                .Where(x => x.Name.EndsWith("Method") && x.FieldType == typeof(string))
+                .Select(x => (string)x.GetValue(null))
+                .ToList();
+        }
 
+        private readonly static List<string> KnownMethods;
         public override SyntaxNode VisitInvocationExpression(InvocationExpressionSyntax node)
+        {
+            var methodIdx = methodsToAddToCurrentType.Count;
+            try
+            {
+                var k = TryVisitInvocationExpression(node);
+                if (k != null) return k;
+            }
+            catch (InvalidCastException)
+            {
+                methodsToAddToCurrentType = methodsToAddToCurrentType.Take(methodIdx).ToList();
+            }
+            return base.VisitInvocationExpression(node); 
+        }
+
+        private SyntaxNode TryVisitInvocationExpression(InvocationExpressionSyntax node)
         {
 
             var memberAccess = node.Expression as MemberAccessExpressionSyntax;
             if (memberAccess != null)
             {
                 var symbol = semantic.GetSymbolInfo(memberAccess).Symbol as IMethodSymbol;
-                currentMethodIsStatic = semantic.GetDeclaredSymbol(node.FirstAncestorOrSelf<MethodDeclarationSyntax>()).IsStatic;
+                var owner = node.AncestorsAndSelf().FirstOrDefault(x => x is MethodDeclarationSyntax);
+                if (owner == null) return null;
+                currentMethodIsStatic = semantic.GetDeclaredSymbol((MethodDeclarationSyntax)owner).IsStatic;
 
-                if (symbol.ContainingType.ToString() == "System.Linq.Enumerable")
+
+                if (KnownMethods.Contains(GetMethodFullName(node)))
                 {
-          
+
                     var firstArg = node.ArgumentList.Arguments.FirstOrDefault()?.Expression;
                     var dataFlow = semantic.AnalyzeDataFlow(node);
                     var chain = new List<InvocationExpressionSyntax>();
@@ -44,17 +72,20 @@ namespace RoslynLinqRewrite
                     while (c.Expression is MemberAccessExpressionSyntax)
                     {
                         c = ((MemberAccessExpressionSyntax)c.Expression).Expression as InvocationExpressionSyntax;
-                        if (c != null) chain.Add(c);
+                        if (c != null && KnownMethods.Contains(GetMethodFullName(c))) chain.Add(c);
                         else break;
                     }
                     var collection = ((MemberAccessExpressionSyntax)chain.Last().Expression).Expression;
 
                     var methodNames = Enumerable.Range(0, 5).Select(x => x < chain.Count ? GetMethodFullName(chain[x]) : null).ToList();
 
-                    currentFlow = dataFlow?.Captured.Select(x => new VariableCapture(x, dataFlow.WrittenInside.Contains(x))) ?? Enumerable.Empty<VariableCapture>();
+                    currentFlow = dataFlow?.DataFlowsIn.Union(dataFlow.DataFlowsOut).Select(x => new VariableCapture(x, dataFlow.DataFlowsOut.Contains(x))) ?? Enumerable.Empty<VariableCapture>();
+                    var semanticReturnType = semantic.GetTypeInfo(node).ConvertedType;
+                    if (semanticReturnType.ToDisplayString().Contains("anonymous type:")) return null;
 
+                    
+                    var returnType = SyntaxFactory.ParseTypeName(semanticReturnType.ToDisplayString());
 
-                    var returnType = SyntaxFactory.ParseTypeName(semantic.GetTypeInfo(node).ConvertedType.ToDisplayString());
                     var aggregationMethod = methodNames[0];
 
                     if (aggregationMethod == WhereMethod || aggregationMethod == SelectMethod)
@@ -68,7 +99,8 @@ namespace RoslynLinqRewrite
                             (inv, arguments, param) =>
                             {
                                 return SyntaxFactory.YieldStatement(SyntaxKind.YieldReturnStatement, SyntaxFactory.IdentifierName(param.Identifier.ValueText));
-                            }
+                            },
+                            true
                         );
                     }
 
@@ -80,7 +112,8 @@ namespace RoslynLinqRewrite
                             new[] { SyntaxFactory.ReturnStatement(SyntaxFactory.IdentifierName("sum_")) },
                             collection,
                             chain,
-                            (inv, arguments, param)=> {
+                            (inv, arguments, param) =>
+                            {
 
                                 return SyntaxFactory.ExpressionStatement(SyntaxFactory.AssignmentExpression(SyntaxKind.AddAssignmentExpression, SyntaxFactory.IdentifierName("sum_"), SyntaxFactory.IdentifierName(param.Identifier.ValueText)));
                             }
@@ -105,7 +138,7 @@ namespace RoslynLinqRewrite
                             }
                         );
                     }
-                    if (aggregationMethod == Any)
+                    if (aggregationMethod == AnyMethod)
                     {
 
                         return RewriteAsLoop(
@@ -281,8 +314,7 @@ namespace RoslynLinqRewrite
 #endif
                 }
             }
-
-            return base.VisitInvocationExpression(node);
+            return null;
         }
 
         private StatementSyntax CreateStatement(ExpressionSyntax expression)
@@ -295,29 +327,35 @@ namespace RoslynLinqRewrite
             return SyntaxFactory.ThrowStatement(SyntaxFactory.ObjectCreationExpression(SyntaxFactory.ParseTypeName(type), CreateArguments(new[] { SyntaxFactory.LiteralExpression(SyntaxKind.StringLiteralExpression, SyntaxFactory.Literal(message)) }), null));
         }
 
-        private static ParameterSyntax GetLambdaParameter(LambdaExpressionSyntax lambda, int index)
+        private static ParameterSyntax GetLambdaParameter(AnonymousFunctionExpressionSyntax lambda, int index)
         {
-            return (lambda as SimpleLambdaExpressionSyntax)?.Parameter ?? ((ParenthesizedLambdaExpressionSyntax)lambda).ParameterList.Parameters[index];
+            return
+                (lambda as SimpleLambdaExpressionSyntax)?.Parameter ??
+                (lambda as ParenthesizedLambdaExpressionSyntax)?.ParameterList.Parameters[index] ??
+                (lambda as AnonymousMethodExpressionSyntax)?.ParameterList.Parameters[index];
         }
 
-        private StatementSyntax CreateProcessingStep(List<InvocationExpressionSyntax> chain, int chainIndex, TypeSyntax itemType, string itemName, ArgumentListSyntax arguments)
+        private StatementSyntax CreateProcessingStep(List<InvocationExpressionSyntax> chain, int chainIndex, TypeSyntax itemType, string itemName, ArgumentListSyntax arguments, bool noAggregation)
         {
+
+            if (chainIndex == 0 && !noAggregation || chainIndex == -1)
+            {
+                return currentAggregation(chain[0], arguments, CreateParameter(itemName, itemType));
+            }
+
             var invocationExpressionSyntax = chain[chainIndex];
 
 
             var method = GetMethodFullName(invocationExpressionSyntax);
 
-            if (chainIndex == 0)
-            {
-                return currentAggregation(invocationExpressionSyntax, arguments, CreateParameter(itemName, itemType));
-            }
+
 
             if (method == WhereMethod)
             {
-                var lambda = (LambdaExpressionSyntax)invocationExpressionSyntax.ArgumentList.Arguments[0].Expression;
+                var lambda = (AnonymousFunctionExpressionSyntax)invocationExpressionSyntax.ArgumentList.Arguments[0].Expression;
 
                 var check = InlineOrCreateMethod(lambda, CreatePrimitiveType(SyntaxKind.BoolKeyword), arguments, CreateParameter(itemName, itemType));
-                var next = CreateProcessingStep(chain, chainIndex - 1, itemType, itemName, arguments);
+                var next = CreateProcessingStep(chain, chainIndex - 1, itemType, itemName, arguments, noAggregation);
                 return SyntaxFactory.IfStatement(check, next is BlockSyntax ? next : SyntaxFactory.Block(next));
             }
 
@@ -327,13 +365,15 @@ namespace RoslynLinqRewrite
                 var lambda = (LambdaExpressionSyntax)invocationExpressionSyntax.ArgumentList.Arguments[0].Expression;
 
                 var newname = "gattone" + ++lastId;
-                var newtype = SyntaxFactory.ParseTypeName(semantic.GetTypeInfo(lambda.Body).ConvertedType.ToDisplayString());
+                var lambdaType = (INamedTypeSymbol)semantic.GetTypeInfo(lambda).ConvertedType;
+                var lambdaBodyType = lambdaType.TypeArguments.Last();
+                var newtype = SyntaxFactory.ParseTypeName(lambdaBodyType.ToDisplayString());
 
 
                 var local = CreateLocalVariableDeclaration(newname, InlineOrCreateMethod(lambda, newtype, arguments, CreateParameter(itemName, itemType)));
 
 
-                var next = CreateProcessingStep(chain, chainIndex - 1, newtype, newname, arguments);
+                var next = CreateProcessingStep(chain, chainIndex - 1, newtype, newname, arguments, noAggregation);
                 var nexts = next is BlockSyntax ? ((BlockSyntax)next).Statements : (IEnumerable<StatementSyntax>)new[] { next };
                 return SyntaxFactory.Block(new[] { local }.Concat(nexts));
             }
@@ -343,11 +383,10 @@ namespace RoslynLinqRewrite
             throw new NotImplementedException();
         }
 
-        private LambdaExpressionSyntax RenameSymbol(LambdaExpressionSyntax container, int argIndex, string newname)
+        private AnonymousFunctionExpressionSyntax RenameSymbol(AnonymousFunctionExpressionSyntax container, int argIndex, string newname)
         {
 
-            var doc = project.Documents.Single();
-            var docid = doc.Id;
+            var doc = project.GetDocument(docid);
 
             var annot = new SyntaxAnnotation("RenamedLambda");
             var annotated = container.WithAdditionalAnnotations(annot);
@@ -356,10 +395,10 @@ namespace RoslynLinqRewrite
             doc = proj.GetDocument(docid);
             var syntaxTree = doc.GetSyntaxTreeAsync().Result;
             var modifiedSemantic = proj.GetCompilationAsync().Result.GetSemanticModel(syntaxTree);
-            annotated = (LambdaExpressionSyntax)doc.GetSyntaxRootAsync().Result.GetAnnotatedNodes(annot).First();
+            annotated = (AnonymousFunctionExpressionSyntax)doc.GetSyntaxRootAsync().Result.GetAnnotatedNodes(annot).First();
             var parameter = GetLambdaParameter(annotated, 0);
             var renamed = Renamer.RenameSymbolAsync(proj.Solution, modifiedSemantic.GetDeclaredSymbol(parameter), newname, null).Result;
-            annotated = (LambdaExpressionSyntax)renamed.GetDocument(doc.Id).GetSyntaxRootAsync().Result.GetAnnotatedNodes(annot).First();
+            annotated = (AnonymousFunctionExpressionSyntax)renamed.GetDocument(doc.Id).GetSyntaxRootAsync().Result.GetAnnotatedNodes(annot).First();
             return annotated.WithoutAnnotations();
         }
 
@@ -367,14 +406,14 @@ namespace RoslynLinqRewrite
         readonly static string FirstMethod = "System.Collections.Generic.IEnumerable<TSource>.First<TSource>()";
         readonly static string FirstOrDefaultMethod = "System.Collections.Generic.IEnumerable<TSource>.FirstOrDefault<TSource>()";
         readonly static string LastOrDefaultMethod = "System.Collections.Generic.IEnumerable<TSource>.LastOrDefault<TSource>()";
-        readonly static string Any = "System.Collections.Generic.IEnumerable<TSource>.Any<TSource>()";
+        readonly static string AnyMethod = "System.Collections.Generic.IEnumerable<TSource>.Any<TSource>()";
         readonly static string AnyWithConditionMethod = "System.Collections.Generic.IEnumerable<TSource>.Any<TSource>(System.Func<TSource, bool>)";
         readonly static string SumWithSelectorMethod = "System.Collections.Generic.IEnumerable<TSource>.Sum<TSource>(System.Func<TSource, int>)";
         readonly static string SumIntsMethod = "System.Collections.Generic.IEnumerable<int>.Sum()";
         readonly static string WhereMethod = "System.Collections.Generic.IEnumerable<TSource>.Where<TSource>(System.Func<TSource, bool>)";
         readonly static string SelectMethod = "System.Collections.Generic.IEnumerable<TSource>.Select<TSource, TResult>(System.Func<TSource, TResult>)";
 
-       
+
         ITypeSymbol GetSymbolType(VariableCapture x)
         {
             return GetSymbolType(x.Symbol);
@@ -410,7 +449,7 @@ namespace RoslynLinqRewrite
 
         delegate StatementSyntax AggregationDelegate(InvocationExpressionSyntax invocation, ArgumentListSyntax arguments, ParameterSyntax param);
         private AggregationDelegate currentAggregation;
-        private ExpressionSyntax RewriteAsLoop(TypeSyntax returnType, IEnumerable<StatementSyntax> prologue, IEnumerable<StatementSyntax> epilogue, ExpressionSyntax collection, List<InvocationExpressionSyntax> chain, AggregationDelegate k)
+        private ExpressionSyntax RewriteAsLoop(TypeSyntax returnType, IEnumerable<StatementSyntax> prologue, IEnumerable<StatementSyntax> epilogue, ExpressionSyntax collection, List<InvocationExpressionSyntax> chain, AggregationDelegate k, bool noaggregation = false)
         {
             var old = currentAggregation;
             currentAggregation = k;
@@ -422,7 +461,7 @@ namespace RoslynLinqRewrite
             var functionName = "ProceduralLinq" + ++lastId;
             var arguments = CreateArguments(new[] { SyntaxFactory.Argument(SyntaxFactory.IdentifierName(ItemName)) }.Concat(currentFlow.Select(x => SyntaxFactory.Argument(SyntaxFactory.IdentifierName(x.Name)).WithRef(x.Changes))));
 
-            var loopContent = CreateProcessingStep(chain, chain.Count - 1, SyntaxFactory.ParseTypeName(collectionItemType.ToDisplayString()), ItemName, arguments);
+            var loopContent = CreateProcessingStep(chain, chain.Count - 1, SyntaxFactory.ParseTypeName(collectionItemType.ToDisplayString()), ItemName, arguments, noaggregation);
             var foreachStatement = SyntaxFactory.ForEachStatement(
                 SyntaxFactory.IdentifierName("var"),
                 ItemName,
@@ -453,6 +492,7 @@ namespace RoslynLinqRewrite
         private int lastId;
         private bool currentMethodIsStatic;
         private IEnumerable<VariableCapture> currentFlow;
+        private DocumentId docid;
 
         public override SyntaxNode VisitStructDeclaration(StructDeclarationSyntax node)
         {
@@ -466,7 +506,7 @@ namespace RoslynLinqRewrite
             return changed;
         }
 
-        private ExpressionSyntax InlineOrCreateMethod(LambdaExpressionSyntax lambda, TypeSyntax returnType, ArgumentListSyntax arguments, ParameterSyntax param)
+        private ExpressionSyntax InlineOrCreateMethod(AnonymousFunctionExpressionSyntax lambda, TypeSyntax returnType, ArgumentListSyntax arguments, ParameterSyntax param)
         {
             var lambdaParameter = semantic.GetDeclaredSymbol(GetLambdaParameter(lambda, 0));
             var currentFlow = semantic.AnalyzeDataFlow(lambda.Body);
@@ -474,7 +514,7 @@ namespace RoslynLinqRewrite
                 .DataFlowsOut
                 .Union(currentFlow.DataFlowsIn)
                 .Where(x => x != lambdaParameter)
-                .Select(x => new VariableCapture(x, currentFlow.WrittenInside.Contains(x)))
+                .Select(x => new VariableCapture(x, currentFlow.DataFlowsOut.Contains(x)))
                 .ToList();
             lambda = RenameSymbol(lambda, 0, param.Identifier.ValueText);
 
