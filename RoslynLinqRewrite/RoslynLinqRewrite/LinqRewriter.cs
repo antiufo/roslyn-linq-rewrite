@@ -234,13 +234,8 @@ namespace RoslynLinqRewrite
             {
                 var lambda = (LambdaExpressionSyntax)invocationExpressionSyntax.ArgumentList.Arguments[0].Expression;
 
-                var simpleLambda = lambda as SimpleLambdaExpressionSyntax;
-
-                var parameters = simpleLambda != null ? (IEnumerable<ParameterSyntax>)new[] { simpleLambda.Parameter } : ((ParenthesizedLambdaExpressionSyntax)lambda).ParameterList.Parameters;
-
-
                 lambda = RenameSymbol(lambda, 0, itemName);
-                var check = InlineOrCreateMethod(lambda.Body, arguments, CreateParameter("el", itemType));
+                var check = InlineOrCreateMethod(lambda.Body, arguments, CreateParameter(itemName, itemType));
                 var next = chainIndex == 1 ? finalStatement(SyntaxFactory.IdentifierName(itemName)) : CreateProcessingStep(chain, chainIndex - 1, itemType, itemName, arguments, finalStatement);
                 return SyntaxFactory.IfStatement(check, next is BlockSyntax ? next : SyntaxFactory.Block(next));
             }
@@ -249,10 +244,6 @@ namespace RoslynLinqRewrite
             if (method == SelectMethod)
             {
                 var lambda = (LambdaExpressionSyntax)invocationExpressionSyntax.ArgumentList.Arguments[0].Expression;
-
-                var simpleLambda = lambda as SimpleLambdaExpressionSyntax;
-
-                var parameters = simpleLambda != null ? (IEnumerable<ParameterSyntax>)new[] { simpleLambda.Parameter } : ((ParenthesizedLambdaExpressionSyntax)lambda).ParameterList.Parameters;
 
                 var newname = "gattone" + ++lastId;
                 lambda = RenameSymbol(lambda, 0, itemName);
