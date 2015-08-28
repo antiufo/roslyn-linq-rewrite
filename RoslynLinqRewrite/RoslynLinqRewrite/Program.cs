@@ -106,11 +106,12 @@ var k = arr2.Where(x => x.StartsWith(""t"")).Select(x=>x==""miao"").LastOrDefaul
 
                 var rewriter = new LinqRewriter(project, comp.GetSemanticModel(syntaxTree), doc.Id);
 
-                var rewritten = rewriter.Visit(syntaxTree.GetRoot());
-                if (syntaxTree.ToString() != rewritten.SyntaxTree.ToString())
+                var rewritten = rewriter.Visit(syntaxTree.GetRoot()).NormalizeWhitespace();
+                var tostring = rewritten.ToString();
+                if (syntaxTree.ToString() != tostring)
                 {
                     //File.WriteAllText(@"C:\temp\roslynrewrite\" + doc.Name, rewritten.SyntaxTree.ToString(), Encoding.UTF8);
-                    File.WriteAllText(doc.FilePath, rewritten.SyntaxTree.ToString(), Encoding.UTF8);
+                    File.WriteAllText(doc.FilePath, tostring, Encoding.UTF8);
                     //Console.WriteLine(rewritten.ToString());
                 }
                 updatedProject = updatedProject.GetDocument(doc.Id).WithSyntaxRoot(rewritten).Project;
