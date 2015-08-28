@@ -156,6 +156,12 @@ namespace RoslynLinqRewrite
                 (lambda as AnonymousMethodExpressionSyntax)?.ParameterList.Parameters[index];
         }
 
+        private ITypeSymbol GetLambdaReturnType(AnonymousFunctionExpressionSyntax lambda)
+        {
+            var symbol = ((INamedTypeSymbol)semantic.GetTypeInfo(lambda).ConvertedType).TypeArguments.Last();
+            return symbol;
+        }
+
 
 
         private AnonymousFunctionExpressionSyntax RenameSymbol(AnonymousFunctionExpressionSyntax container, int argIndex, string newname)
