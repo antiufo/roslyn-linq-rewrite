@@ -46,7 +46,7 @@ namespace RoslynLinqRewrite
             {
                 methodsToAddToCurrentType = methodsToAddToCurrentType.Take(methodIdx).ToList();
             }
-            return base.VisitInvocationExpression(node); 
+            return base.VisitInvocationExpression(node);
         }
 
         private SyntaxNode TryVisitInvocationExpression(InvocationExpressionSyntax node)
@@ -59,6 +59,8 @@ namespace RoslynLinqRewrite
                 var owner = node.AncestorsAndSelf().FirstOrDefault(x => x is MethodDeclarationSyntax);
                 if (owner == null) return null;
                 currentMethodIsStatic = semantic.GetDeclaredSymbol((MethodDeclarationSyntax)owner).IsStatic;
+                currentMethodTypeParameters = ((MethodDeclarationSyntax)owner).TypeParameterList;
+                currentMethodConstraintClauses = ((MethodDeclarationSyntax)owner).ConstraintClauses;
 
 
                 if (KnownMethods.Contains(GetMethodFullName(node)))
@@ -83,7 +85,7 @@ namespace RoslynLinqRewrite
                     var semanticReturnType = semantic.GetTypeInfo(node).ConvertedType;
                     if (semanticReturnType.ToDisplayString().Contains("anonymous type:")) return null;
 
-                    
+
                     var returnType = SyntaxFactory.ParseTypeName(semanticReturnType.ToDisplayString());
 
                     var aggregationMethod = methodNames[0];
@@ -385,21 +387,34 @@ namespace RoslynLinqRewrite
 
         private AnonymousFunctionExpressionSyntax RenameSymbol(AnonymousFunctionExpressionSyntax container, int argIndex, string newname)
         {
+            var oldparameter = GetLambdaParameter(container, argIndex);
+            var oldsymbol = semantic.GetDeclaredSymbol(oldparameter);
+            var tokensToRename = container.DescendantNodesAndSelf().Where(x =>
+            {
+                var sem = semantic.GetSymbolInfo(x);
+                if (sem.Symbol == oldsymbol) return true;
+                return false;
+            });
+            return container.ReplaceNodes(tokensToRename, (a, b) =>
+            {
+                var ide = b as IdentifierNameSyntax;
+                if (ide != null) return ide.WithIdentifier(SyntaxFactory.Identifier(newname));
+                throw new NotImplementedException();
+            });
+            //var doc = project.GetDocument(docid);
 
-            var doc = project.GetDocument(docid);
-
-            var annot = new SyntaxAnnotation("RenamedLambda");
-            var annotated = container.WithAdditionalAnnotations(annot);
-            var root = project.GetDocument(docid).GetSyntaxRootAsync().Result.ReplaceNode(container, annotated).SyntaxTree;
-            var proj = project.GetDocument(docid).WithSyntaxRoot(root.GetRoot()).Project;
-            doc = proj.GetDocument(docid);
-            var syntaxTree = doc.GetSyntaxTreeAsync().Result;
-            var modifiedSemantic = proj.GetCompilationAsync().Result.GetSemanticModel(syntaxTree);
-            annotated = (AnonymousFunctionExpressionSyntax)doc.GetSyntaxRootAsync().Result.GetAnnotatedNodes(annot).First();
-            var parameter = GetLambdaParameter(annotated, 0);
-            var renamed = Renamer.RenameSymbolAsync(proj.Solution, modifiedSemantic.GetDeclaredSymbol(parameter), newname, null).Result;
-            annotated = (AnonymousFunctionExpressionSyntax)renamed.GetDocument(doc.Id).GetSyntaxRootAsync().Result.GetAnnotatedNodes(annot).First();
-            return annotated.WithoutAnnotations();
+            //var annot = new SyntaxAnnotation("RenamedLambda");
+            //var annotated = container.WithAdditionalAnnotations(annot);
+            //var root = project.GetDocument(docid).GetSyntaxRootAsync().Result.ReplaceNode(container, annotated).SyntaxTree;
+            //var proj = project.GetDocument(docid).WithSyntaxRoot(root.GetRoot()).Project;
+            //doc = proj.GetDocument(docid);
+            //var syntaxTree = doc.GetSyntaxTreeAsync().Result;
+            //var modifiedSemantic = proj.GetCompilationAsync().Result.GetSemanticModel(syntaxTree);
+            //annotated = (AnonymousFunctionExpressionSyntax)doc.GetSyntaxRootAsync().Result.GetAnnotatedNodes(annot).First();
+            //var parameter = GetLambdaParameter(annotated, 0);
+            //var renamed = Renamer.RenameSymbolAsync(proj.Solution, modifiedSemantic.GetDeclaredSymbol(parameter), newname, null).Result;
+            //annotated = (AnonymousFunctionExpressionSyntax)renamed.GetDocument(doc.Id).GetSyntaxRootAsync().Result.GetAnnotatedNodes(annot).First();
+            //return annotated.WithoutAnnotations();
         }
 
         readonly static string ToListMethod = "System.Collections.Generic.IEnumerable<TSource>.ToList<TSource>()";
@@ -473,8 +488,10 @@ namespace RoslynLinqRewrite
                             foreachStatement
                         }).Concat(epilogue)))
                         .WithStatic(currentMethodIsStatic)
+                        .WithTypeParameterList(currentMethodTypeParameters)
+                        .WithConstraintClauses(currentMethodConstraintClauses)
                         .NormalizeWhitespace();
-            methodsToAddToCurrentType.Add(coreFunction);
+            methodsToAddToCurrentType.Add(Tuple.Create(currentType, coreFunction));
 
 
             var inv = SyntaxFactory.InvocationExpression(SyntaxFactory.IdentifierName(functionName), CreateArguments(new[] { SyntaxFactory.Argument((ExpressionSyntax)Visit(collection)) }.Concat(arguments.Arguments.Skip(1))));
@@ -488,7 +505,7 @@ namespace RoslynLinqRewrite
             return SyntaxFactory.PredefinedType(SyntaxFactory.Token(keyword));
         }
 
-        private List<MethodDeclarationSyntax> methodsToAddToCurrentType = new List<MethodDeclarationSyntax>();
+        private List<Tuple<TypeDeclarationSyntax, MethodDeclarationSyntax>> methodsToAddToCurrentType = new List<Tuple<TypeDeclarationSyntax, MethodDeclarationSyntax>>();
         private int lastId;
         private bool currentMethodIsStatic;
         private IEnumerable<VariableCapture> currentFlow;
@@ -496,13 +513,23 @@ namespace RoslynLinqRewrite
 
         public override SyntaxNode VisitStructDeclaration(StructDeclarationSyntax node)
         {
-            var changed = (StructDeclarationSyntax)base.VisitStructDeclaration(node);
+            return VisitTypeDeclaration(node);
+        }
+
+        private SyntaxNode VisitTypeDeclaration(TypeDeclarationSyntax node)
+        {
+            var old = currentType;
+            currentType = node;
+            var changed = (TypeDeclarationSyntax)(node is ClassDeclarationSyntax ? base.VisitClassDeclaration((ClassDeclarationSyntax)node) : base.VisitStructDeclaration((StructDeclarationSyntax)node));
             if (methodsToAddToCurrentType.Count != 0)
             {
-                var withMethods = changed.AddMembers(methodsToAddToCurrentType.ToArray());
-                methodsToAddToCurrentType.Clear();
-                return withMethods;
+                var newmembers = methodsToAddToCurrentType.Where(x => x.Item1 == currentType).Select(x => x.Item2).ToArray();
+                var withMethods = changed is ClassDeclarationSyntax ? (TypeDeclarationSyntax)((ClassDeclarationSyntax)changed).AddMembers(newmembers) : ((StructDeclarationSyntax)changed).AddMembers(newmembers);
+                methodsToAddToCurrentType.RemoveAll(x => x.Item1 == currentType);
+                currentType = old;
+                return withMethods.NormalizeWhitespace();
             }
+            currentType = old;
             return changed;
         }
 
@@ -541,24 +568,23 @@ namespace RoslynLinqRewrite
                                  )))
                                 .WithBody(body as BlockSyntax ?? (body is StatementSyntax ? SyntaxFactory.Block((StatementSyntax)body) : SyntaxFactory.Block(SyntaxFactory.ReturnStatement((ExpressionSyntax)body))))
                                 .WithStatic(currentMethodIsStatic)
+                                .WithTypeParameterList(currentMethodTypeParameters)
+                                .WithConstraintClauses(currentMethodConstraintClauses)
                                 .NormalizeWhitespace();
 
 
-                methodsToAddToCurrentType.Add(method);
+                methodsToAddToCurrentType.Add(Tuple.Create(currentType, method));
                 return SyntaxFactory.InvocationExpression(SyntaxFactory.IdentifierName(fn), CreateArguments(new[] { SyntaxFactory.Argument(SyntaxFactory.IdentifierName(param.Identifier.ValueText)) }.Union(captures.Select(x => SyntaxFactory.Argument(SyntaxFactory.IdentifierName(x.Name)).WithRef(x.Changes)))));
             }
         }
 
+        private TypeDeclarationSyntax currentType;
+        private TypeParameterListSyntax currentMethodTypeParameters;
+        private SyntaxList<TypeParameterConstraintClauseSyntax> currentMethodConstraintClauses;
+
         public override SyntaxNode VisitClassDeclaration(ClassDeclarationSyntax node)
         {
-            var changed = (ClassDeclarationSyntax)base.VisitClassDeclaration(node);
-            if (methodsToAddToCurrentType.Count != 0)
-            {
-                var withMethods = changed.AddMembers(methodsToAddToCurrentType.ToArray());
-                methodsToAddToCurrentType.Clear();
-                return withMethods.NormalizeWhitespace();
-            }
-            return changed;
+            return VisitTypeDeclaration(node);
         }
 
         private LocalDeclarationStatementSyntax CreateLocalVariableDeclaration(string name, ExpressionSyntax value)
