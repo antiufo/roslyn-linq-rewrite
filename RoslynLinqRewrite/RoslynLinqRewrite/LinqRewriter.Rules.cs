@@ -231,6 +231,31 @@ namespace RoslynLinqRewrite
                 );
             }
 
+
+
+            if (aggregationMethod == ToDictionaryWithKeyMethod || aggregationMethod == ToDictionaryWithKeyValueMethod)
+            {
+                var dictIdentifier = SyntaxFactory.IdentifierName("_dict");
+                return RewriteAsLoop(
+                    returnType,
+                    new[] { CreateLocalVariableDeclaration("_dict", SyntaxFactory.ObjectCreationExpression(returnType, CreateArguments(Enumerable.Empty<ArgumentSyntax>()), null)) },
+                    new[] { SyntaxFactory.ReturnStatement(dictIdentifier) },
+                    collection,
+                    chain,
+                    (inv, arguments, param) =>
+                    {
+                        var keyLambda = (AnonymousFunctionExpressionSyntax)node.ArgumentList.Arguments.First().Expression;
+                        var valueLambda = (AnonymousFunctionExpressionSyntax)node.ArgumentList.Arguments.ElementAtOrDefault(1).Expression;
+                        return CreateStatement(SyntaxFactory.InvocationExpression(SyntaxFactory.MemberAccessExpression(SyntaxKind.SimpleMemberAccessExpression, dictIdentifier, SyntaxFactory.IdentifierName("Add")), CreateArguments(new[] {
+                            InlineOrCreateMethod(keyLambda, SyntaxFactory.ParseTypeName( GetLambdaReturnType(keyLambda).ToDisplayString()), arguments, param),
+                            aggregationMethod == ToDictionaryWithKeyValueMethod ?
+                            InlineOrCreateMethod(valueLambda, SyntaxFactory.ParseTypeName( GetLambdaReturnType(valueLambda).ToDisplayString()), arguments, param):
+                             SyntaxFactory.IdentifierName(param.Identifier.ValueText),
+                        })));
+                    }
+                );
+            }
+
             if (aggregationMethod == ToArrayMethod)
             {
                 var listIdentifier = SyntaxFactory.IdentifierName("_list");
@@ -444,7 +469,8 @@ namespace RoslynLinqRewrite
         }
 
 
-
+        readonly static string ToDictionaryWithKeyMethod = "System.Collections.Generic.IEnumerable<TSource>.ToDictionary<TSource, TKey>(System.Func<TSource, TKey>)";
+        readonly static string ToDictionaryWithKeyValueMethod = "System.Collections.Generic.IEnumerable<TSource>.ToDictionary<TSource, TKey, TElement>(System.Func<TSource, TKey>, System.Func<TSource, TElement>)";
         readonly static string ToArrayMethod = "System.Collections.Generic.IEnumerable<TSource>.ToArray<TSource>()";
         readonly static string ToListMethod = "System.Collections.Generic.IEnumerable<TSource>.ToList<TSource>()";
         readonly static string ReverseMethod = "System.Collections.Generic.IEnumerable<TSource>.Reverse<TSource>()";
