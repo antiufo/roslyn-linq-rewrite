@@ -65,9 +65,6 @@ namespace RoslynLinqRewrite
 
                 if (KnownMethods.Contains(GetMethodFullName(node)))
                 {
-
-                    var firstArg = node.ArgumentList.Arguments.FirstOrDefault()?.Expression;
-                    var dataFlow = semantic.AnalyzeDataFlow(node);
                     var chain = new List<InvocationExpressionSyntax>();
                     chain.Add(node);
                     var c = node;
@@ -77,16 +74,44 @@ namespace RoslynLinqRewrite
                         if (c != null && KnownMethods.Contains(GetMethodFullName(c))) chain.Add(c);
                         else break;
                     }
+
+
+                    var flowsIn = new List<ISymbol>();
+                    var flowsOut = new List<ISymbol>();
+                    foreach (var item in chain)
+                    {
+                        foreach (var arg in item.ArgumentList.Arguments)
+                        {
+                            var dataFlow = semantic.AnalyzeDataFlow(arg.Expression);
+                            foreach (var k in dataFlow.DataFlowsIn)
+                            {
+                                if (!flowsIn.Contains(k)) flowsIn.Add(k);
+                            }
+                            foreach (var k in dataFlow.DataFlowsOut)
+                            {
+                                if (!flowsOut.Contains(k)) flowsOut.Add(k);
+                            }
+
+                        }
+                    }
+
+                    currentFlow = flowsIn
+                        .Union(flowsOut)
+                        .Where(x => (x as IParameterSymbol)?.IsThis != true)
+                        .Select(x => new VariableCapture(x, flowsOut.Contains(x))) ?? Enumerable.Empty<VariableCapture>();
+
+
+
+
                     var collection = ((MemberAccessExpressionSyntax)chain.Last().Expression).Expression;
 
                     var methodNames = Enumerable.Range(0, 5).Select(x => x < chain.Count ? GetMethodFullName(chain[x]) : null).ToList();
 
-                    currentFlow = dataFlow?.DataFlowsIn
-                        .Union(dataFlow.DataFlowsOut)
-                        .Where(x => (x as IParameterSymbol)?.IsThis != true)
-                        .Select(x => new VariableCapture(x, dataFlow.DataFlowsOut.Contains(x))) ?? Enumerable.Empty<VariableCapture>();
+
                     var semanticReturnType = semantic.GetTypeInfo(node).Type;
                     if (IsAnonymousType(semanticReturnType) || currentFlow.Any(x => IsAnonymousType(GetSymbolType(x.Symbol)))) return null;
+
+
 
 
                     var returnType = SyntaxFactory.ParseTypeName(semanticReturnType.ToDisplayString());
@@ -586,7 +611,7 @@ namespace RoslynLinqRewrite
 
                 methodsToAddToCurrentType.Add(Tuple.Create(currentType, method));
 
-                
+
                 return SyntaxFactory.InvocationExpression(GetMethodNameSyntaxWithCurrentTypeParameters(fn), CreateArguments(new[] { SyntaxFactory.Argument(SyntaxFactory.IdentifierName(param.Identifier.ValueText)) }.Union(captures.Select(x => SyntaxFactory.Argument(SyntaxFactory.IdentifierName(x.Name)).WithRef(x.Changes)))));
             }
         }
