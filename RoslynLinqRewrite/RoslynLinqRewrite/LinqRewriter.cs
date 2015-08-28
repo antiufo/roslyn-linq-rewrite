@@ -105,6 +105,8 @@ namespace RoslynLinqRewrite
 
                     var collection = ((MemberAccessExpressionSyntax)chain.Last().Expression).Expression;
 
+                    if (IsAnonymousType(semantic.GetTypeInfo(collection).Type)) return null;
+
                     var methodNames = Enumerable.Range(0, 5).Select(x => x < chain.Count ? GetMethodFullName(chain[x]) : null).ToList();
 
 
