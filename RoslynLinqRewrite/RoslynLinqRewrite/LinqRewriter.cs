@@ -66,7 +66,7 @@ namespace RoslynLinqRewrite
                 if (KnownMethods.Contains(GetMethodFullName(node)))
                 {
                     var chain = new List<LinqStep>();
-                    chain.Add(new LinqStep(GetMethodFullName(node), node.ArgumentList.Arguments.Select(x => x.Expression).ToList()));
+                    chain.Add(new LinqStep(GetMethodFullName(node), node.ArgumentList.Arguments.Select(x => x.Expression).ToList(), node));
                     var c = node;
                     var lastNode = node;
                     while (c.Expression is MemberAccessExpressionSyntax)
@@ -74,7 +74,7 @@ namespace RoslynLinqRewrite
                         c = ((MemberAccessExpressionSyntax)c.Expression).Expression as InvocationExpressionSyntax;
                         if (c != null && KnownMethods.Contains(GetMethodFullName(c)))
                         {
-                            chain.Add(new LinqStep(GetMethodFullName(c), c.ArgumentList.Arguments.Select(x => x.Expression).ToList()));
+                            chain.Add(new LinqStep(GetMethodFullName(c), c.ArgumentList.Arguments.Select(x => x.Expression).ToList(), c));
                             lastNode = c;
                         }
                         else break;

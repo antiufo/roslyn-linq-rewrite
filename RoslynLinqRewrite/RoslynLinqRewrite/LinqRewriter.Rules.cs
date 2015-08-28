@@ -15,7 +15,7 @@ namespace RoslynLinqRewrite
         private SyntaxNode TryRewrite(string aggregationMethod, ExpressionSyntax collection, TypeSyntax returnType, List<LinqStep> chain, InvocationExpressionSyntax node)
         {
 
-            if (aggregationMethod == WhereMethod || aggregationMethod == SelectMethod)
+            if (aggregationMethod == WhereMethod || aggregationMethod == SelectMethod || aggregationMethod == CastMethod || aggregationMethod == OfTypeMethod)
             {
                 return RewriteAsLoop(
                     returnType,
@@ -113,7 +113,7 @@ namespace RoslynLinqRewrite
                     {
                         return SyntaxFactory.IfStatement(SyntaxFactory.BinaryExpression(SyntaxKind.EqualsExpression, SyntaxFactory.IdentifierName("_requestedPosition"), SyntaxFactory.PostfixUnaryExpression(SyntaxKind.PostIncrementExpression, SyntaxFactory.IdentifierName("_count"))), SyntaxFactory.ReturnStatement(SyntaxFactory.IdentifierName(param.Identifier.ValueText)));
                     },
-                    additionalParameters: new[] { Tuple.Create( CreateParameter("_requestedPosition", CreatePrimitiveType(SyntaxKind.IntKeyword)), node.ArgumentList.Arguments.First().Expression) }
+                    additionalParameters: new[] { Tuple.Create(CreateParameter("_requestedPosition", CreatePrimitiveType(SyntaxKind.IntKeyword)), node.ArgumentList.Arguments.First().Expression) }
                 );
             }
 
