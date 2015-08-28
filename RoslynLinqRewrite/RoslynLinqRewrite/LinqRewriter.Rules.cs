@@ -15,7 +15,7 @@ namespace RoslynLinqRewrite
         private SyntaxNode TryRewrite(string aggregationMethod, ExpressionSyntax collection, TypeSyntax returnType, List<LinqStep> chain, InvocationExpressionSyntax node)
         {
 
-            if (aggregationMethod == WhereMethod || aggregationMethod == SelectMethod || aggregationMethod == CastMethod || aggregationMethod == OfTypeMethod)
+            if (aggregationMethod == WhereMethod || aggregationMethod == SelectMethod || aggregationMethod == CastMethod || aggregationMethod == OfTypeMethod || aggregationMethod == ReverseMethod)
             {
                 return RewriteAsLoop(
                     returnType,
