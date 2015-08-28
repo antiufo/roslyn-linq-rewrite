@@ -215,13 +215,13 @@ namespace RoslynLinqRewrite
             }
 
 
-            if (aggregationMethod == ToListMethod || aggregationMethod==ReverseMethod)
+            if (aggregationMethod == ToListMethod || aggregationMethod == ReverseMethod)
             {
                 var listIdentifier = SyntaxFactory.IdentifierName("_list");
                 return RewriteAsLoop(
                     returnType,
                     new[] { CreateLocalVariableDeclaration("_list", SyntaxFactory.ObjectCreationExpression(returnType, CreateArguments(Enumerable.Empty<ArgumentSyntax>()), null)) },
-                    aggregationMethod == ReverseMethod ? new StatementSyntax[] { SyntaxFactory.ExpressionStatement( SyntaxFactory.InvocationExpression(SyntaxFactory.MemberAccessExpression(SyntaxKind.SimpleMemberAccessExpression, SyntaxFactory.IdentifierName("_list"), SyntaxFactory.IdentifierName("Reverse")))) ,  SyntaxFactory.ReturnStatement(listIdentifier) } : new[] { SyntaxFactory.ReturnStatement(listIdentifier) },
+                    aggregationMethod == ReverseMethod ? new StatementSyntax[] { SyntaxFactory.ExpressionStatement(SyntaxFactory.InvocationExpression(SyntaxFactory.MemberAccessExpression(SyntaxKind.SimpleMemberAccessExpression, SyntaxFactory.IdentifierName("_list"), SyntaxFactory.IdentifierName("Reverse")))), SyntaxFactory.ReturnStatement(listIdentifier) } : new[] { SyntaxFactory.ReturnStatement(listIdentifier) },
                     collection,
                     chain,
                     (inv, arguments, param) =>
@@ -406,8 +406,8 @@ namespace RoslynLinqRewrite
                     {
                         return SyntaxFactory.IfStatement(SyntaxFactory.BinaryExpression(SyntaxKind.IsExpression, SyntaxFactory.IdentifierName(itemName), newtype), SyntaxFactory.Block(
                                 CreateLocalVariableDeclaration(newname, SyntaxFactory.CastExpression(newtype, SyntaxFactory.IdentifierName(itemName))),
-                                next        
-                            
+                                next
+
                             ));
                     }
                     else
