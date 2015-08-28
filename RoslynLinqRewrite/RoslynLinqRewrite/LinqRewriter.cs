@@ -550,7 +550,7 @@ namespace RoslynLinqRewrite
             var currentCaptures = currentFlow
                 .DataFlowsOut
                 .Union(currentFlow.DataFlowsIn)
-                .Where(x => x != lambdaParameter)
+                .Where(x => x != lambdaParameter && (x as IParameterSymbol)?.IsThis != true)
                 .Select(x => new VariableCapture(x, currentFlow.DataFlowsOut.Contains(x)))
                 .ToList();
             lambda = RenameSymbol(lambda, 0, param.Identifier.ValueText);
