@@ -66,8 +66,6 @@ var k = arr2.Where(x => x.StartsWith(""t"")).Select(x=>x==""miao"").LastOrDefaul
             var rewriter = new LinqRewriter(proj, comp.GetSemanticModel(syntaxTree), doc.Id);
             var rewritten = rewriter.Visit(syntaxTree.GetRoot());
             proj = doc.WithSyntaxRoot(rewritten).Project;
-            // if (!workspace.TryApplyChanges(proj.Solution))
-            //      throw new Exception();
 
             Console.WriteLine(rewritten.ToString());
 
@@ -98,8 +96,9 @@ var k = arr2.Where(x => x.StartsWith(""t"")).Select(x=>x==""miao"").LastOrDefaul
                 if (item.Severity != DiagnosticSeverity.Hidden)
                     Console.WriteLine(item);
             }
+            
             var updatedProject = project;
-            foreach (var doc in project.Documents.SkipWhile(x => x.Name != "FizzlerCustomSelectors.cs"))
+            foreach (var doc in project.Documents)
             {
                 Console.WriteLine(doc.FilePath);
                 var syntaxTree = doc.GetSyntaxTreeAsync().Result;
