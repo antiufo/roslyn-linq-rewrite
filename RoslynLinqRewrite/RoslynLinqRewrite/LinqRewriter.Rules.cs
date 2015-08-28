@@ -12,7 +12,7 @@ namespace RoslynLinqRewrite
     public partial class LinqRewriter : CSharpSyntaxRewriter
     {
 
-        private SyntaxNode TryRewrite(string aggregationMethod, ExpressionSyntax collection, TypeSyntax returnType, List<InvocationExpressionSyntax> chain, InvocationExpressionSyntax node)
+        private SyntaxNode TryRewrite(string aggregationMethod, ExpressionSyntax collection, TypeSyntax returnType, List<LinqStep> chain, InvocationExpressionSyntax node)
         {
 
             if (aggregationMethod == WhereMethod || aggregationMethod == SelectMethod)
@@ -46,34 +46,17 @@ namespace RoslynLinqRewrite
                     }
                 );
             }
-            if (aggregationMethod == AnyWithConditionMethod)
+   
+            if (aggregationMethod == AnyMethod || aggregationMethod == AnyWithConditionMethod)
             {
+                var lambda = (LambdaExpressionSyntax)chain.First().Arguments.FirstOrDefault();
 
                 return RewriteAsLoop(
                     CreatePrimitiveType(SyntaxKind.BoolKeyword),
                     Enumerable.Empty<StatementSyntax>(),
                     new[] { SyntaxFactory.ReturnStatement(SyntaxFactory.LiteralExpression(SyntaxKind.FalseLiteralExpression)) },
                     collection,
-                    chain,
-                    (inv, arguments, param) =>
-                    {
-                        var lambda = (LambdaExpressionSyntax)inv.ArgumentList.Arguments.First().Expression;
-
-                        return SyntaxFactory.IfStatement(InlineOrCreateMethod(lambda, CreatePrimitiveType(SyntaxKind.BoolKeyword), arguments, param),
-                         SyntaxFactory.ReturnStatement(SyntaxFactory.LiteralExpression(SyntaxKind.TrueLiteralExpression)
-                         ));
-                    }
-                );
-            }
-            if (aggregationMethod == AnyMethod)
-            {
-
-                return RewriteAsLoop(
-                    CreatePrimitiveType(SyntaxKind.BoolKeyword),
-                    Enumerable.Empty<StatementSyntax>(),
-                    new[] { SyntaxFactory.ReturnStatement(SyntaxFactory.LiteralExpression(SyntaxKind.FalseLiteralExpression)) },
-                    collection,
-                    chain,
+                    aggregationMethod == AnyWithConditionMethod ? InsertExpandedShortcutMethod(chain, WhereMethod, lambda) : chain,
                     (inv, arguments, param) =>
                     {
                         return SyntaxFactory.ReturnStatement(SyntaxFactory.LiteralExpression(SyntaxKind.TrueLiteralExpression));
@@ -275,8 +258,15 @@ namespace RoslynLinqRewrite
             return null;
         }
 
+        private List<LinqStep> InsertExpandedShortcutMethod(List<LinqStep> chain, string methodFullName, LambdaExpressionSyntax lambda)
+        {
+            var ch = chain.ToList();
+        //    var baseExpression = ((MemberAccessExpressionSyntax)chain.First().Expression).Expression;
+            ch.Insert(1, new LinqStep(methodFullName,  new[] { lambda }));
+            return ch;
+        }
 
-        private StatementSyntax CreateProcessingStep(List<InvocationExpressionSyntax> chain, int chainIndex, TypeSyntax itemType, string itemName, ArgumentListSyntax arguments, bool noAggregation)
+        private StatementSyntax CreateProcessingStep(List<LinqStep> chain, int chainIndex, TypeSyntax itemType, string itemName, ArgumentListSyntax arguments, bool noAggregation)
         {
 
             if (chainIndex == 0 && !noAggregation || chainIndex == -1)
@@ -284,16 +274,16 @@ namespace RoslynLinqRewrite
                 return currentAggregation(chain[0], arguments, CreateParameter(itemName, itemType));
             }
 
-            var invocationExpressionSyntax = chain[chainIndex];
+            var step = chain[chainIndex];
 
 
-            var method = GetMethodFullName(invocationExpressionSyntax);
+            var method = step.MethodName;
 
 
 
             if (method == WhereMethod)
             {
-                var lambda = (AnonymousFunctionExpressionSyntax)invocationExpressionSyntax.ArgumentList.Arguments[0].Expression;
+                var lambda = (AnonymousFunctionExpressionSyntax)step.Arguments[0];
 
                 var check = InlineOrCreateMethod(lambda, CreatePrimitiveType(SyntaxKind.BoolKeyword), arguments, CreateParameter(itemName, itemType));
                 var next = CreateProcessingStep(chain, chainIndex - 1, itemType, itemName, arguments, noAggregation);
@@ -303,7 +293,7 @@ namespace RoslynLinqRewrite
 
             if (method == SelectMethod)
             {
-                var lambda = (LambdaExpressionSyntax)invocationExpressionSyntax.ArgumentList.Arguments[0].Expression;
+                var lambda = (LambdaExpressionSyntax)step.Arguments[0];
 
                 var newname = "gattone" + ++lastId;
                 var lambdaType = (INamedTypeSymbol)semantic.GetTypeInfo(lambda).ConvertedType;
