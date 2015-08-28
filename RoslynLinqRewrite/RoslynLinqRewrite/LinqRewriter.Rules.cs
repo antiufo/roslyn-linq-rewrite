@@ -383,6 +383,43 @@ namespace RoslynLinqRewrite
             }
 
 
+
+            if (method == OfTypeMethod || method == CastMethod)
+            {
+                var newtype = ((GenericNameSyntax)((MemberAccessExpressionSyntax)step.Invocation.Expression).Name).TypeArgumentList.Arguments.First();
+
+                var newname = "gattone" + ++lastId;
+
+                var next = CreateProcessingStep(chain, chainIndex - 1, newtype, newname, arguments, noAggregation);
+
+
+                if (method == CastMethod)
+                {
+                    var local = CreateLocalVariableDeclaration(newname, SyntaxFactory.CastExpression(newtype, SyntaxFactory.IdentifierName(itemName)));
+                    var nexts = next is BlockSyntax ? ((BlockSyntax)next).Statements : (IEnumerable<StatementSyntax>)new[] { next };
+                    return SyntaxFactory.Block(new[] { local }.Concat(nexts));
+                }
+                else
+                {
+                    var type = semantic.GetTypeInfo(newtype).Type;
+                    if (type.IsValueType)
+                    {
+                        return SyntaxFactory.IfStatement(SyntaxFactory.BinaryExpression(SyntaxKind.IsExpression, SyntaxFactory.IdentifierName(itemName), newtype), SyntaxFactory.Block(
+                                CreateLocalVariableDeclaration(newname, SyntaxFactory.CastExpression(newtype, SyntaxFactory.IdentifierName(itemName))),
+                                next        
+                            
+                            ));
+                    }
+                    else
+                    {
+                        var local = CreateLocalVariableDeclaration(newname, SyntaxFactory.BinaryExpression(SyntaxKind.AsExpression, SyntaxFactory.IdentifierName(itemName), newtype));
+                        return SyntaxFactory.Block(local, SyntaxFactory.IfStatement(SyntaxFactory.BinaryExpression(SyntaxKind.NotEqualsExpression, SyntaxFactory.IdentifierName(newname), SyntaxFactory.LiteralExpression(SyntaxKind.NullLiteralExpression)),
+                            next));
+                    }
+                }
+            }
+
+
             if (method == SelectMethod)
             {
                 var lambda = (LambdaExpressionSyntax)step.Arguments[0];
@@ -439,6 +476,8 @@ namespace RoslynLinqRewrite
         readonly static string SumIntsMethod = "System.Collections.Generic.IEnumerable<int>.Sum()";
         readonly static string WhereMethod = "System.Collections.Generic.IEnumerable<TSource>.Where<TSource>(System.Func<TSource, bool>)";
         readonly static string SelectMethod = "System.Collections.Generic.IEnumerable<TSource>.Select<TSource, TResult>(System.Func<TSource, TResult>)";
+        readonly static string CastMethod = "System.Collections.IEnumerable.Cast<TResult>()";
+        readonly static string OfTypeMethod = "System.Collections.IEnumerable.OfType<TResult>()";
 
 
     }
