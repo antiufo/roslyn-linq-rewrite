@@ -63,6 +63,25 @@ namespace RoslynLinqRewrite
                 );
             }
 
+            if (aggregationMethod == AllWithConditionMethod) // All alone does not exist
+            {
+
+                return RewriteAsLoop(
+                    CreatePrimitiveType(SyntaxKind.BoolKeyword),
+                    Enumerable.Empty<StatementSyntax>(),
+                    new[] { SyntaxFactory.ReturnStatement(SyntaxFactory.LiteralExpression(SyntaxKind.TrueLiteralExpression)) },
+                    collection,
+                    chain,
+                    (inv, arguments, param) =>
+                    {
+                        var lambda = (LambdaExpressionSyntax)inv.Arguments.First();
+                        return SyntaxFactory.IfStatement(SyntaxFactory.PrefixUnaryExpression(SyntaxKind.LogicalNotExpression, SyntaxFactory.ParenthesizedExpression(InlineOrCreateMethod(lambda, CreatePrimitiveType(SyntaxKind.BoolKeyword), arguments, param))),
+                         SyntaxFactory.ReturnStatement(SyntaxFactory.LiteralExpression(SyntaxKind.FalseLiteralExpression)
+                         ));
+                    }
+                );
+            }
+
 
 
             if (aggregationMethod == FirstMethod || aggregationMethod == FirstWithConditionMethod)
@@ -373,6 +392,8 @@ namespace RoslynLinqRewrite
 
         readonly static string AnyMethod = "System.Collections.Generic.IEnumerable<TSource>.Any<TSource>()";
         readonly static string AnyWithConditionMethod = "System.Collections.Generic.IEnumerable<TSource>.Any<TSource>(System.Func<TSource, bool>)";
+
+        readonly static string AllWithConditionMethod = "System.Collections.Generic.IEnumerable<TSource>.All<TSource>(System.Func<TSource, bool>)";
         readonly static string SumWithSelectorMethod = "System.Collections.Generic.IEnumerable<TSource>.Sum<TSource>(System.Func<TSource, int>)";
         readonly static string SumIntsMethod = "System.Collections.Generic.IEnumerable<int>.Sum()";
         readonly static string WhereMethod = "System.Collections.Generic.IEnumerable<TSource>.Where<TSource>(System.Func<TSource, bool>)";
