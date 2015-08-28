@@ -239,7 +239,7 @@ namespace RoslynLinqRewrite
                 SyntaxFactory.IdentifierName("var"),
                 ItemName,
                 SyntaxFactory.IdentifierName(ItemsName),
-                loopContent);
+                loopContent is BlockSyntax ? loopContent : SyntaxFactory.Block(loopContent));
             var coreFunction = SyntaxFactory.MethodDeclaration(returnType, functionName)
                         .WithParameterList(CreateParameters(parameters))
                         .WithBody(SyntaxFactory.Block(prologue.Concat(new[] {
