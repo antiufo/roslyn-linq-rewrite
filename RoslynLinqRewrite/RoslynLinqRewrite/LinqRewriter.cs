@@ -504,7 +504,7 @@ namespace RoslynLinqRewrite
             methodsToAddToCurrentType.Add(Tuple.Create(currentType, coreFunction));
 
 
-            var inv = SyntaxFactory.InvocationExpression(SyntaxFactory.IdentifierName(functionName), CreateArguments(new[] { SyntaxFactory.Argument((ExpressionSyntax)Visit(collection)) }.Concat(arguments.Arguments.Skip(1))));
+            var inv = SyntaxFactory.InvocationExpression(GetMethodNameSyntaxWithCurrentTypeParameters(functionName), CreateArguments(new[] { SyntaxFactory.Argument((ExpressionSyntax)Visit(collection)) }.Concat(arguments.Arguments.Skip(1))));
 
             currentAggregation = old;
             return inv;
@@ -584,10 +584,16 @@ namespace RoslynLinqRewrite
                                 .WithConstraintClauses(currentMethodConstraintClauses)
                                 .NormalizeWhitespace();
 
-
                 methodsToAddToCurrentType.Add(Tuple.Create(currentType, method));
-                return SyntaxFactory.InvocationExpression(SyntaxFactory.IdentifierName(fn), CreateArguments(new[] { SyntaxFactory.Argument(SyntaxFactory.IdentifierName(param.Identifier.ValueText)) }.Union(captures.Select(x => SyntaxFactory.Argument(SyntaxFactory.IdentifierName(x.Name)).WithRef(x.Changes)))));
+
+                
+                return SyntaxFactory.InvocationExpression(GetMethodNameSyntaxWithCurrentTypeParameters(fn), CreateArguments(new[] { SyntaxFactory.Argument(SyntaxFactory.IdentifierName(param.Identifier.ValueText)) }.Union(captures.Select(x => SyntaxFactory.Argument(SyntaxFactory.IdentifierName(x.Name)).WithRef(x.Changes)))));
             }
+        }
+
+        private ExpressionSyntax GetMethodNameSyntaxWithCurrentTypeParameters(string fn)
+        {
+            return (currentMethodTypeParameters?.Parameters.Count).GetValueOrDefault() != 0 ? SyntaxFactory.GenericName(SyntaxFactory.Identifier(fn), SyntaxFactory.TypeArgumentList(CreateSeparatedList(currentMethodTypeParameters.Parameters.Select(x => SyntaxFactory.ParseTypeName(x.Identifier.ValueText))))) : (NameSyntax)SyntaxFactory.IdentifierName(fn);
         }
 
         private TypeDeclarationSyntax currentType;
