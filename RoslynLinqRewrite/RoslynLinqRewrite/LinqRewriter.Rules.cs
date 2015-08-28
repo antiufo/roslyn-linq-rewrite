@@ -46,17 +46,16 @@ namespace RoslynLinqRewrite
                     }
                 );
             }
-   
+
             if (aggregationMethod == AnyMethod || aggregationMethod == AnyWithConditionMethod)
             {
-                var lambda = (LambdaExpressionSyntax)chain.First().Arguments.FirstOrDefault();
 
                 return RewriteAsLoop(
                     CreatePrimitiveType(SyntaxKind.BoolKeyword),
                     Enumerable.Empty<StatementSyntax>(),
                     new[] { SyntaxFactory.ReturnStatement(SyntaxFactory.LiteralExpression(SyntaxKind.FalseLiteralExpression)) },
                     collection,
-                    aggregationMethod == AnyWithConditionMethod ? InsertExpandedShortcutMethod(chain, WhereMethod, lambda) : chain,
+                    MaybeAddFilter(chain, aggregationMethod == AnyWithConditionMethod),
                     (inv, arguments, param) =>
                     {
                         return SyntaxFactory.ReturnStatement(SyntaxFactory.LiteralExpression(SyntaxKind.TrueLiteralExpression));
@@ -66,14 +65,14 @@ namespace RoslynLinqRewrite
 
 
 
-            if (aggregationMethod == FirstMethod)
+            if (aggregationMethod == FirstMethod || aggregationMethod == FirstWithConditionMethod)
             {
                 return RewriteAsLoop(
                     returnType,
                     Enumerable.Empty<StatementSyntax>(),
                     new[] { CreateThrowException("System.InvalidOperationException", "The sequence did not contain any elements.") },
                     collection,
-                    chain,
+                    MaybeAddFilter(chain, aggregationMethod == FirstWithConditionMethod),
                     (inv, arguments, param) =>
                     {
                         return SyntaxFactory.ReturnStatement(SyntaxFactory.IdentifierName(param.Identifier.ValueText));
@@ -83,14 +82,14 @@ namespace RoslynLinqRewrite
 
 
 
-            if (aggregationMethod == FirstOrDefaultMethod)
+            if (aggregationMethod == FirstOrDefaultMethod || aggregationMethod == FirstOrDefaultWithConditionMethod)
             {
                 return RewriteAsLoop(
                     returnType,
                     Enumerable.Empty<StatementSyntax>(),
                     new[] { SyntaxFactory.ReturnStatement(SyntaxFactory.DefaultExpression(returnType)) },
                     collection,
-                    chain,
+                    MaybeAddFilter(chain, aggregationMethod == FirstOrDefaultWithConditionMethod),
                     (inv, arguments, param) =>
                     {
                         return SyntaxFactory.ReturnStatement(SyntaxFactory.IdentifierName(param.Identifier.ValueText));
@@ -98,28 +97,28 @@ namespace RoslynLinqRewrite
                 );
             }
 
-            if (aggregationMethod == LastOrDefaultMethod)
+            if (aggregationMethod == LastOrDefaultMethod || aggregationMethod == LastOrDefaultWithConditionMethod)
             {
                 return RewriteAsLoop(
                     returnType,
                     new[] { CreateLocalVariableDeclaration("_last", SyntaxFactory.DefaultExpression(returnType)) },
                     new[] { SyntaxFactory.ReturnStatement(SyntaxFactory.IdentifierName("_last")) },
                     collection,
-                    chain,
+                    MaybeAddFilter(chain, aggregationMethod == LastOrDefaultWithConditionMethod),
                     (inv, arguments, param) =>
                     {
                         return SyntaxFactory.ExpressionStatement(SyntaxFactory.AssignmentExpression(SyntaxKind.SimpleAssignmentExpression, SyntaxFactory.IdentifierName("_last"), SyntaxFactory.IdentifierName(param.Identifier.ValueText)));
                     }
                 );
             }
-            if (aggregationMethod == LastMethod)
+            if (aggregationMethod == LastMethod || aggregationMethod == LastWithConditionMethod)
             {
                 return RewriteAsLoop(
                     returnType,
                     new[] { CreateLocalVariableDeclaration("_last", SyntaxFactory.DefaultExpression(returnType)), CreateLocalVariableDeclaration("_found", SyntaxFactory.LiteralExpression(SyntaxKind.FalseLiteralExpression)) },
                     new StatementSyntax[] { SyntaxFactory.IfStatement(SyntaxFactory.PrefixUnaryExpression(SyntaxKind.LogicalNotExpression, SyntaxFactory.IdentifierName("_found")), CreateThrowException("System.InvalidOperationException", "The sequence did not contain any elements.")), SyntaxFactory.ReturnStatement(SyntaxFactory.IdentifierName("_last")) },
                     collection,
-                    chain,
+                    MaybeAddFilter(chain, aggregationMethod == LastWithConditionMethod),
                     (inv, arguments, param) =>
                     {
                         return SyntaxFactory.Block(
@@ -149,7 +148,7 @@ namespace RoslynLinqRewrite
             if (aggregationMethod == ToArrayMethod)
             {
                 var listIdentifier = SyntaxFactory.IdentifierName("_list");
-                var listType = SyntaxFactory.ParseTypeName("System.Collections.Generic.List<"+((ArrayTypeSyntax)returnType).ElementType+">");
+                var listType = SyntaxFactory.ParseTypeName("System.Collections.Generic.List<" + ((ArrayTypeSyntax)returnType).ElementType + ">");
                 return RewriteAsLoop(
                     returnType,
                     new[] { CreateLocalVariableDeclaration("_list", SyntaxFactory.ObjectCreationExpression(listType, CreateArguments(Enumerable.Empty<ArgumentSyntax>()), null)) },
@@ -258,11 +257,18 @@ namespace RoslynLinqRewrite
             return null;
         }
 
+        private List<LinqStep> MaybeAddFilter(List<LinqStep> chain, bool condition)
+        {
+            if (!condition) return chain;
+            var lambda = (LambdaExpressionSyntax)chain.First().Arguments.FirstOrDefault();
+            return InsertExpandedShortcutMethod(chain, WhereMethod, lambda);
+        }
+
         private List<LinqStep> InsertExpandedShortcutMethod(List<LinqStep> chain, string methodFullName, LambdaExpressionSyntax lambda)
         {
             var ch = chain.ToList();
-        //    var baseExpression = ((MemberAccessExpressionSyntax)chain.First().Expression).Expression;
-            ch.Insert(1, new LinqStep(methodFullName,  new[] { lambda }));
+            //    var baseExpression = ((MemberAccessExpressionSyntax)chain.First().Expression).Expression;
+            ch.Insert(1, new LinqStep(methodFullName, new[] { lambda }));
             return ch;
         }
 
@@ -315,12 +321,18 @@ namespace RoslynLinqRewrite
         }
 
 
+
         readonly static string ToArrayMethod = "System.Collections.Generic.IEnumerable<TSource>.ToArray<TSource>()";
         readonly static string ToListMethod = "System.Collections.Generic.IEnumerable<TSource>.ToList<TSource>()";
         readonly static string FirstMethod = "System.Collections.Generic.IEnumerable<TSource>.First<TSource>()";
         readonly static string LastMethod = "System.Collections.Generic.IEnumerable<TSource>.Last<TSource>()";
         readonly static string FirstOrDefaultMethod = "System.Collections.Generic.IEnumerable<TSource>.FirstOrDefault<TSource>()";
-        readonly static string LastOrDefaultMethod = "System.Collections.Generic.IEnumerable<TSource>.LastOrDefault<TSource>()";
+        readonly static string LastOrDefaultMethod = "System.Collections.Generic.IEnumerable<TSource>.LastOrDefault<TSource>(System.Func<TSource, bool>)";
+        readonly static string FirstWithConditionMethod = "System.Collections.Generic.IEnumerable<TSource>.First<TSource>(System.Func<TSource, bool>)";
+        readonly static string LastWithConditionMethod = "System.Collections.Generic.IEnumerable<TSource>.Last<TSource>(System.Func<TSource, bool>)";
+        readonly static string FirstOrDefaultWithConditionMethod = "System.Collections.Generic.IEnumerable<TSource>.FirstOrDefault<TSource>(System.Func<TSource, bool>)";
+        readonly static string LastOrDefaultWithConditionMethod = "System.Collections.Generic.IEnumerable<TSource>.LastOrDefault<TSource>(System.Func<TSource, bool>)";
+
         readonly static string AnyMethod = "System.Collections.Generic.IEnumerable<TSource>.Any<TSource>()";
         readonly static string AnyWithConditionMethod = "System.Collections.Generic.IEnumerable<TSource>.Any<TSource>(System.Func<TSource, bool>)";
         readonly static string SumWithSelectorMethod = "System.Collections.Generic.IEnumerable<TSource>.Sum<TSource>(System.Func<TSource, int>)";
