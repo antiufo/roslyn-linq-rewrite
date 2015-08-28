@@ -65,13 +65,18 @@ namespace RoslynLinqRewrite
 
                 if (KnownMethods.Contains(GetMethodFullName(node)))
                 {
-                    var chain = new List<InvocationExpressionSyntax>();
-                    chain.Add(node);
+                    var chain = new List<LinqStep>();
+                    chain.Add(new LinqStep(GetMethodFullName(node), node.ArgumentList.Arguments.Select(x => x.Expression).ToList()));
                     var c = node;
+                    var lastNode = node;
                     while (c.Expression is MemberAccessExpressionSyntax)
                     {
                         c = ((MemberAccessExpressionSyntax)c.Expression).Expression as InvocationExpressionSyntax;
-                        if (c != null && KnownMethods.Contains(GetMethodFullName(c))) chain.Add(c);
+                        if (c != null && KnownMethods.Contains(GetMethodFullName(c)))
+                        {
+                            chain.Add(new LinqStep(GetMethodFullName(c), c.ArgumentList.Arguments.Select(x => x.Expression).ToList()));
+                            lastNode = c;
+                        }
                         else break;
                     }
 
@@ -80,9 +85,9 @@ namespace RoslynLinqRewrite
                     var flowsOut = new List<ISymbol>();
                     foreach (var item in chain)
                     {
-                        foreach (var arg in item.ArgumentList.Arguments)
+                        foreach (var arg in item.Arguments)
                         {
-                            var dataFlow = semantic.AnalyzeDataFlow(arg.Expression);
+                            var dataFlow = semantic.AnalyzeDataFlow(arg);
                             foreach (var k in dataFlow.DataFlowsIn)
                             {
                                 if (!flowsIn.Contains(k)) flowsIn.Add(k);
@@ -103,11 +108,11 @@ namespace RoslynLinqRewrite
 
 
 
-                    var collection = ((MemberAccessExpressionSyntax)chain.Last().Expression).Expression;
+                    var collection = ((MemberAccessExpressionSyntax)lastNode.Expression).Expression;
 
                     if (IsAnonymousType(semantic.GetTypeInfo(collection).Type)) return null;
 
-                    var methodNames = Enumerable.Range(0, 5).Select(x => x < chain.Count ? GetMethodFullName(chain[x]) : null).ToList();
+                    var methodNames = Enumerable.Range(0, 5).Select(x => x < chain.Count ? chain[x].MethodName : null).ToList();
 
 
                     var semanticReturnType = semantic.GetTypeInfo(node).Type;
@@ -151,7 +156,7 @@ namespace RoslynLinqRewrite
                 (lambda as AnonymousMethodExpressionSyntax)?.ParameterList.Parameters[index];
         }
 
- 
+
 
         private AnonymousFunctionExpressionSyntax RenameSymbol(AnonymousFunctionExpressionSyntax container, int argIndex, string newname)
         {
@@ -185,7 +190,7 @@ namespace RoslynLinqRewrite
             //return annotated.WithoutAnnotations();
         }
 
-        
+
 
         ITypeSymbol GetSymbolType(VariableCapture x)
         {
@@ -220,9 +225,9 @@ namespace RoslynLinqRewrite
             }
         }
 
-        delegate StatementSyntax AggregationDelegate(InvocationExpressionSyntax invocation, ArgumentListSyntax arguments, ParameterSyntax param);
+        delegate StatementSyntax AggregationDelegate(LinqStep invocation, ArgumentListSyntax arguments, ParameterSyntax param);
         private AggregationDelegate currentAggregation;
-        private ExpressionSyntax RewriteAsLoop(TypeSyntax returnType, IEnumerable<StatementSyntax> prologue, IEnumerable<StatementSyntax> epilogue, ExpressionSyntax collection, List<InvocationExpressionSyntax> chain, AggregationDelegate k, bool noaggregation = false)
+        private ExpressionSyntax RewriteAsLoop(TypeSyntax returnType, IEnumerable<StatementSyntax> prologue, IEnumerable<StatementSyntax> epilogue, ExpressionSyntax collection, List<LinqStep> chain, AggregationDelegate k, bool noaggregation = false)
         {
             var old = currentAggregation;
             currentAggregation = k;
