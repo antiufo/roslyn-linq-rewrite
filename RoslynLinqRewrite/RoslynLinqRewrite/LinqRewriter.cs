@@ -42,7 +42,7 @@ namespace RoslynLinqRewrite
                 var k = TryVisitInvocationExpression(node);
                 if (k != null) return k;
             }
-            catch (InvalidCastException)
+            catch (Exception ex) when (ex is InvalidCastException || ex is NotSupportedException)
             {
                 methodsToAddToCurrentType = methodsToAddToCurrentType.Take(methodIdx).ToList();
             }
@@ -81,9 +81,12 @@ namespace RoslynLinqRewrite
 
                     var methodNames = Enumerable.Range(0, 5).Select(x => x < chain.Count ? GetMethodFullName(chain[x]) : null).ToList();
 
-                    currentFlow = dataFlow?.DataFlowsIn.Union(dataFlow.DataFlowsOut).Select(x => new VariableCapture(x, dataFlow.DataFlowsOut.Contains(x))) ?? Enumerable.Empty<VariableCapture>();
-                    var semanticReturnType = semantic.GetTypeInfo(node).ConvertedType;
-                    if (semanticReturnType.ToDisplayString().Contains("anonymous type:")) return null;
+                    currentFlow = dataFlow?.DataFlowsIn
+                        .Union(dataFlow.DataFlowsOut)
+                        .Where(x => (x as IParameterSymbol)?.IsThis != true)
+                        .Select(x => new VariableCapture(x, dataFlow.DataFlowsOut.Contains(x))) ?? Enumerable.Empty<VariableCapture>();
+                    var semanticReturnType = semantic.GetTypeInfo(node).Type;
+                    if (IsAnonymousType(semanticReturnType) || currentFlow.Any(x => IsAnonymousType(GetSymbolType(x.Symbol)))) return null;
 
 
                     var returnType = SyntaxFactory.ParseTypeName(semanticReturnType.ToDisplayString());
@@ -324,6 +327,13 @@ namespace RoslynLinqRewrite
             return SyntaxFactory.ExpressionStatement(expression);
         }
 
+
+
+        private bool IsAnonymousType(ITypeSymbol t)
+        {
+            return (t.ToDisplayString().Contains("anonymous type:"));
+        }
+
         private ThrowStatementSyntax CreateThrowException(string type, string message)
         {
             return SyntaxFactory.ThrowStatement(SyntaxFactory.ObjectCreationExpression(SyntaxFactory.ParseTypeName(type), CreateArguments(new[] { SyntaxFactory.LiteralExpression(SyntaxKind.StringLiteralExpression, SyntaxFactory.Literal(message)) }), null));
@@ -369,7 +379,7 @@ namespace RoslynLinqRewrite
                 var newname = "gattone" + ++lastId;
                 var lambdaType = (INamedTypeSymbol)semantic.GetTypeInfo(lambda).ConvertedType;
                 var lambdaBodyType = lambdaType.TypeArguments.Last();
-                var newtype = SyntaxFactory.ParseTypeName(lambdaBodyType.ToDisplayString());
+                var newtype = IsAnonymousType(lambdaBodyType) ? null : SyntaxFactory.ParseTypeName(lambdaBodyType.ToDisplayString());
 
 
                 var local = CreateLocalVariableDeclaration(newname, InlineOrCreateMethod(lambda, newtype, arguments, CreateParameter(itemName, itemType)));
@@ -560,6 +570,8 @@ namespace RoslynLinqRewrite
             }
             else
             {
+                if (captures.Any(x => IsAnonymousType(GetSymbolType(x.Symbol)))) throw new NotSupportedException();
+                if (returnType == null) throw new NotSupportedException(); // Anonymous type
                 var method = SyntaxFactory.MethodDeclaration(returnType, fn)
                                 .WithParameterList(SyntaxFactory.ParameterList(SyntaxFactory.SeparatedList(
                                     new[] {
