@@ -86,7 +86,7 @@ namespace RoslynLinqRewrite
             if (aggregationMethod == FirstMethod)
             {
                 return RewriteAsLoop(
-                    SyntaxFactory.ParseTypeName(semantic.GetTypeInfo(node).ConvertedType.ToDisplayString()),
+                    returnType,
                     Enumerable.Empty<StatementSyntax>(),
                     new[] { CreateThrowException("System.InvalidOperationException", "The sequence did not contain any elements.") },
                     collection,
@@ -129,6 +129,22 @@ namespace RoslynLinqRewrite
                     }
                 );
             }
+            if (aggregationMethod == LastMethod)
+            {
+                return RewriteAsLoop(
+                    returnType,
+                    new[] { CreateLocalVariableDeclaration("_last", SyntaxFactory.DefaultExpression(returnType)), CreateLocalVariableDeclaration("_found", SyntaxFactory.LiteralExpression(SyntaxKind.FalseLiteralExpression)) },
+                    new StatementSyntax[] { SyntaxFactory.IfStatement(SyntaxFactory.PrefixUnaryExpression(SyntaxKind.LogicalNotExpression, SyntaxFactory.IdentifierName("_found")), CreateThrowException("System.InvalidOperationException", "The sequence did not contain any elements.")), SyntaxFactory.ReturnStatement(SyntaxFactory.IdentifierName("_last")) },
+                    collection,
+                    chain,
+                    (inv, arguments, param) =>
+                    {
+                        return SyntaxFactory.Block(
+                            SyntaxFactory.ExpressionStatement(SyntaxFactory.AssignmentExpression(SyntaxKind.SimpleAssignmentExpression, SyntaxFactory.IdentifierName("_found"), SyntaxFactory.LiteralExpression(SyntaxKind.TrueLiteralExpression))),
+                            SyntaxFactory.ExpressionStatement(SyntaxFactory.AssignmentExpression(SyntaxKind.SimpleAssignmentExpression, SyntaxFactory.IdentifierName("_last"), SyntaxFactory.IdentifierName(param.Identifier.ValueText))));
+                    }
+                );
+            }
 
 
             if (aggregationMethod == ToListMethod)
@@ -138,6 +154,23 @@ namespace RoslynLinqRewrite
                     returnType,
                     new[] { CreateLocalVariableDeclaration("_list", SyntaxFactory.ObjectCreationExpression(returnType, CreateArguments(Enumerable.Empty<ArgumentSyntax>()), null)) },
                     new[] { SyntaxFactory.ReturnStatement(listIdentifier) },
+                    collection,
+                    chain,
+                    (inv, arguments, param) =>
+                    {
+                        return CreateStatement(SyntaxFactory.InvocationExpression(SyntaxFactory.MemberAccessExpression(SyntaxKind.SimpleMemberAccessExpression, listIdentifier, SyntaxFactory.IdentifierName("Add")), CreateArguments(new[] { SyntaxFactory.IdentifierName(param.Identifier.ValueText) })));
+                    }
+                );
+            }
+
+            if (aggregationMethod == ToArrayMethod)
+            {
+                var listIdentifier = SyntaxFactory.IdentifierName("_list");
+                var listType = SyntaxFactory.ParseTypeName("System.Collections.Generic.List<"+((ArrayTypeSyntax)returnType).ElementType+">");
+                return RewriteAsLoop(
+                    returnType,
+                    new[] { CreateLocalVariableDeclaration("_list", SyntaxFactory.ObjectCreationExpression(listType, CreateArguments(Enumerable.Empty<ArgumentSyntax>()), null)) },
+                    new[] { SyntaxFactory.ReturnStatement(SyntaxFactory.InvocationExpression(SyntaxFactory.MemberAccessExpression(SyntaxKind.SimpleMemberAccessExpression, listIdentifier, SyntaxFactory.IdentifierName("ToArray")))) },
                     collection,
                     chain,
                     (inv, arguments, param) =>
@@ -292,8 +325,10 @@ namespace RoslynLinqRewrite
         }
 
 
+        readonly static string ToArrayMethod = "System.Collections.Generic.IEnumerable<TSource>.ToArray<TSource>()";
         readonly static string ToListMethod = "System.Collections.Generic.IEnumerable<TSource>.ToList<TSource>()";
         readonly static string FirstMethod = "System.Collections.Generic.IEnumerable<TSource>.First<TSource>()";
+        readonly static string LastMethod = "System.Collections.Generic.IEnumerable<TSource>.Last<TSource>()";
         readonly static string FirstOrDefaultMethod = "System.Collections.Generic.IEnumerable<TSource>.FirstOrDefault<TSource>()";
         readonly static string LastOrDefaultMethod = "System.Collections.Generic.IEnumerable<TSource>.LastOrDefault<TSource>()";
         readonly static string AnyMethod = "System.Collections.Generic.IEnumerable<TSource>.Any<TSource>()";
