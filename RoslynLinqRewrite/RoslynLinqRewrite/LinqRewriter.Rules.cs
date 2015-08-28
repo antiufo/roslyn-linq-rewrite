@@ -215,13 +215,13 @@ namespace RoslynLinqRewrite
             }
 
 
-            if (aggregationMethod == ToListMethod)
+            if (aggregationMethod == ToListMethod || aggregationMethod==ReverseMethod)
             {
                 var listIdentifier = SyntaxFactory.IdentifierName("_list");
                 return RewriteAsLoop(
                     returnType,
                     new[] { CreateLocalVariableDeclaration("_list", SyntaxFactory.ObjectCreationExpression(returnType, CreateArguments(Enumerable.Empty<ArgumentSyntax>()), null)) },
-                    new[] { SyntaxFactory.ReturnStatement(listIdentifier) },
+                    aggregationMethod == ReverseMethod ? new StatementSyntax[] { SyntaxFactory.ExpressionStatement( SyntaxFactory.InvocationExpression(SyntaxFactory.MemberAccessExpression(SyntaxKind.SimpleMemberAccessExpression, SyntaxFactory.IdentifierName("_list"), SyntaxFactory.IdentifierName("Reverse")))) ,  SyntaxFactory.ReturnStatement(listIdentifier) } : new[] { SyntaxFactory.ReturnStatement(listIdentifier) },
                     collection,
                     chain,
                     (inv, arguments, param) =>
@@ -447,6 +447,7 @@ namespace RoslynLinqRewrite
 
         readonly static string ToArrayMethod = "System.Collections.Generic.IEnumerable<TSource>.ToArray<TSource>()";
         readonly static string ToListMethod = "System.Collections.Generic.IEnumerable<TSource>.ToList<TSource>()";
+        readonly static string ReverseMethod = "System.Collections.Generic.IEnumerable<TSource>.Reverse<TSource>()";
         readonly static string FirstMethod = "System.Collections.Generic.IEnumerable<TSource>.First<TSource>()";
         readonly static string SingleMethod = "System.Collections.Generic.IEnumerable<TSource>.Single<TSource>()";
         readonly static string LastMethod = "System.Collections.Generic.IEnumerable<TSource>.Last<TSource>()";
