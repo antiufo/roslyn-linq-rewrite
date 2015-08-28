@@ -10,12 +10,14 @@ namespace RoslynLinqRewrite
 {
     class LinqStep
     {
-        public LinqStep(string methodName, IReadOnlyList<ExpressionSyntax> arguments)
+        public LinqStep(string methodName, IReadOnlyList<ExpressionSyntax> arguments, InvocationExpressionSyntax invocation = null)
         {
             this.MethodName = methodName;
             this.Arguments = arguments;
+            this.Invocation = invocation;
         }
         public string MethodName { get; }
         public IReadOnlyList<ExpressionSyntax> Arguments { get; }
+        public InvocationExpressionSyntax Invocation { get; }
     }
 }
