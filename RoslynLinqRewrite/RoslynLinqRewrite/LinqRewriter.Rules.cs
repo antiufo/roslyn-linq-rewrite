@@ -32,18 +32,22 @@ namespace RoslynLinqRewrite
                 );
             }
 
-            if (aggregationMethod == SumIntsMethod)
+            if (aggregationMethod.Contains(".Sum"))
             {
+                var elementType = ((returnType as NullableTypeSyntax)?.ElementType ?? returnType);
                 return RewriteAsLoop(
-                    CreatePrimitiveType(SyntaxKind.IntKeyword),
-                    new[] { CreateLocalVariableDeclaration("sum_", SyntaxFactory.LiteralExpression(SyntaxKind.NumericLiteralExpression, SyntaxFactory.Literal(0))) },
+                    returnType,
+                    new[] { CreateLocalVariableDeclaration("sum_", SyntaxFactory.CastExpression(elementType, SyntaxFactory.LiteralExpression(SyntaxKind.NumericLiteralExpression, SyntaxFactory.Literal(0)))) },
                     new[] { SyntaxFactory.ReturnStatement(SyntaxFactory.IdentifierName("sum_")) },
                     collection,
-                    chain,
+                    MaybeAddSelect(chain, node.ArgumentList.Arguments.Count != 0),
                     (inv, arguments, param) =>
                     {
 
-                        return SyntaxFactory.ExpressionStatement(SyntaxFactory.AssignmentExpression(SyntaxKind.AddAssignmentExpression, SyntaxFactory.IdentifierName("sum_"), SyntaxFactory.IdentifierName(param.Identifier.ValueText)));
+                        ExpressionSyntax currentValue = SyntaxFactory.IdentifierName(param.Identifier.ValueText);
+                        if (elementType != returnType) currentValue = SyntaxFactory.InvocationExpression(SyntaxFactory.MemberAccessExpression(SyntaxKind.SimpleMemberAccessExpression, currentValue, SyntaxFactory.IdentifierName("GetValueOrDefault"))); 
+                        var sum = SyntaxFactory.ExpressionStatement(SyntaxFactory.AssignmentExpression(SyntaxKind.AddAssignmentExpression, SyntaxFactory.IdentifierName("sum_"), currentValue));
+                        return elementType == returnType ? sum : (StatementSyntax)SyntaxFactory.IfStatement(SyntaxFactory.BinaryExpression(SyntaxKind.NotEqualsExpression, SyntaxFactory.IdentifierName(param.Identifier.ValueText), SyntaxFactory.LiteralExpression(SyntaxKind.NullLiteralExpression)), sum);
                     }
                 );
             }
@@ -296,7 +300,7 @@ namespace RoslynLinqRewrite
                     );
                 }
             }
-        
+
 #if false
 
             
@@ -351,6 +355,8 @@ namespace RoslynLinqRewrite
             return null;
         }
 
+
+
         private ExpressionSyntax GetCollectionCount(ExpressionSyntax collection, bool allowUnknown)
         {
             var collectionType = semantic.GetTypeInfo(collection).Type;
@@ -366,20 +372,21 @@ namespace RoslynLinqRewrite
             {
                 return SyntaxFactory.MemberAccessExpression(SyntaxKind.SimpleMemberAccessExpression, SyntaxFactory.IdentifierName(ItemsName), SyntaxFactory.IdentifierName("Count"));
             }
-            if (allowUnknown) {
+            if (allowUnknown)
+            {
                 var items = new int[] { };
                 var itemType = GetItemType(collectionType);
                 return
                     SyntaxFactory.InvocationExpression(
                         SyntaxFactory.MemberAccessExpression(
-                            SyntaxKind.SimpleMemberAccessExpression, 
+                            SyntaxKind.SimpleMemberAccessExpression,
                             SyntaxFactory.ParenthesizedExpression(
                                 SyntaxFactory.ConditionalAccessExpression(
                                     SyntaxFactory.ParenthesizedExpression(
                                         SyntaxFactory.BinaryExpression(
                                             SyntaxKind.AsExpression,
                                             SyntaxFactory.IdentifierName(ItemsName),
-                                            SyntaxFactory.ParseTypeName("System.Collections.Generic.Collection<"+itemType.ToDisplayString()+">")
+                                            SyntaxFactory.ParseTypeName("System.Collections.Generic.Collection<" + itemType.ToDisplayString() + ">")
                                         )
                                     ),
                                     SyntaxFactory.MemberBindingExpression(
@@ -401,6 +408,14 @@ namespace RoslynLinqRewrite
             if (!condition) return chain;
             var lambda = (LambdaExpressionSyntax)chain.First().Arguments.FirstOrDefault();
             return InsertExpandedShortcutMethod(chain, WhereMethod, lambda);
+        }
+
+
+        private List<LinqStep> MaybeAddSelect(List<LinqStep> chain, bool condition)
+        {
+            if (!condition) return chain;
+            var lambda = (LambdaExpressionSyntax)chain.First().Arguments.FirstOrDefault();
+            return InsertExpandedShortcutMethod(chain, SelectMethod, lambda);
         }
 
         private List<LinqStep> InsertExpandedShortcutMethod(List<LinqStep> chain, string methodFullName, LambdaExpressionSyntax lambda)
@@ -527,8 +542,11 @@ namespace RoslynLinqRewrite
         readonly static string AnyWithConditionMethod = "System.Collections.Generic.IEnumerable<TSource>.Any<TSource>(System.Func<TSource, bool>)";
 
         readonly static string AllWithConditionMethod = "System.Collections.Generic.IEnumerable<TSource>.All<TSource>(System.Func<TSource, bool>)";
-        //readonly static string SumWithSelectorMethod = "System.Collections.Generic.IEnumerable<TSource>.Sum<TSource>(System.Func<TSource, int>)";
-        readonly static string SumIntsMethod = "System.Collections.Generic.IEnumerable<int>.Sum()";
+
+
+
+
+
         readonly static string WhereMethod = "System.Collections.Generic.IEnumerable<TSource>.Where<TSource>(System.Func<TSource, bool>)";
         readonly static string SelectMethod = "System.Collections.Generic.IEnumerable<TSource>.Select<TSource, TResult>(System.Func<TSource, TResult>)";
         readonly static string CastMethod = "System.Collections.IEnumerable.Cast<TResult>()";

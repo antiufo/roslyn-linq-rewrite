@@ -63,7 +63,7 @@ namespace RoslynLinqRewrite
                 currentMethodConstraintClauses = ((MethodDeclarationSyntax)owner).ConstraintClauses;
 
 
-                if (KnownMethods.Contains(GetMethodFullName(node)))
+                if (IsSupportedMethod(GetMethodFullName(node)))
                 {
                     var chain = new List<LinqStep>();
                     chain.Add(new LinqStep(GetMethodFullName(node), node.ArgumentList.Arguments.Select(x => x.Expression).ToList(), node));
@@ -72,7 +72,7 @@ namespace RoslynLinqRewrite
                     while (c.Expression is MemberAccessExpressionSyntax)
                     {
                         c = ((MemberAccessExpressionSyntax)c.Expression).Expression as InvocationExpressionSyntax;
-                        if (c != null && KnownMethods.Contains(GetMethodFullName(c)))
+                        if (c != null && IsSupportedMethod(GetMethodFullName(c)))
                         {
                             chain.Add(new LinqStep(GetMethodFullName(c), c.ArgumentList.Arguments.Select(x => x.Expression).ToList(), c));
                             lastNode = c;
@@ -129,6 +129,17 @@ namespace RoslynLinqRewrite
             return null;
         }
 
+        private bool IsSupportedMethod(string v)
+        {
+            if (KnownMethods.Contains(v)) return true;
+            if (!v.StartsWith("System.Collections.Generic.IEnumerable<")) return false;
+            var k = v.Replace("<", "(");
+            if (!k.Contains(">.Sum(") && !k.Contains(">.Average(") && !k.Contains(">.Min(") && !k.Contains(">.Max(")) return false;
+            if (k.Contains("TResult")) return false;
+            if (v == "System.Collections.Generic.IEnumerable<TSource>.Min()") return false;
+            if (v == "System.Collections.Generic.IEnumerable<TSource>.Max()") return false;
+            return true;
+        }
 
         private StatementSyntax CreateStatement(ExpressionSyntax expression)
         {
