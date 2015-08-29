@@ -12,8 +12,9 @@ namespace RoslynLinqRewrite
     public partial class LinqRewriter : CSharpSyntaxRewriter
     {
 
-        private SyntaxNode TryRewrite(string aggregationMethod, ExpressionSyntax collection, TypeSyntax returnType, List<LinqStep> chain, InvocationExpressionSyntax node)
+        private SyntaxNode TryRewrite(string aggregationMethod, ExpressionSyntax collection, ITypeSymbol semanticReturnType, List<LinqStep> chain, InvocationExpressionSyntax node)
         {
+            var returnType = SyntaxFactory.ParseTypeName(semanticReturnType.ToDisplayString());
 
             if (aggregationMethod == WhereMethod || aggregationMethod == SelectMethod || aggregationMethod == CastMethod || aggregationMethod == OfTypeMethod)
             {
@@ -220,7 +221,7 @@ namespace RoslynLinqRewrite
                 var listIdentifier = SyntaxFactory.IdentifierName("_list");
                 return RewriteAsLoop(
                     returnType,
-                    new[] { CreateLocalVariableDeclaration("_list", SyntaxFactory.ObjectCreationExpression(returnType, CreateArguments(Enumerable.Empty<ArgumentSyntax>()), null)) },
+                    new[] { CreateLocalVariableDeclaration("_list", SyntaxFactory.ObjectCreationExpression(SyntaxFactory.ParseTypeName("System.Collections.Generic.List<"+ GetItemType(semanticReturnType).ToDisplayString() +">"), CreateArguments(Enumerable.Empty<ArgumentSyntax>()), null)) },
                     aggregationMethod == ReverseMethod ? new StatementSyntax[] { SyntaxFactory.ExpressionStatement(SyntaxFactory.InvocationExpression(SyntaxFactory.MemberAccessExpression(SyntaxKind.SimpleMemberAccessExpression, SyntaxFactory.IdentifierName("_list"), SyntaxFactory.IdentifierName("Reverse")))), SyntaxFactory.ReturnStatement(listIdentifier) } : new[] { SyntaxFactory.ReturnStatement(listIdentifier) },
                     collection,
                     chain,
@@ -465,7 +466,7 @@ namespace RoslynLinqRewrite
 
 
 
-            throw new NotImplementedException();
+            throw new NotSupportedException();
         }
 
 
@@ -499,7 +500,7 @@ namespace RoslynLinqRewrite
         readonly static string AnyWithConditionMethod = "System.Collections.Generic.IEnumerable<TSource>.Any<TSource>(System.Func<TSource, bool>)";
 
         readonly static string AllWithConditionMethod = "System.Collections.Generic.IEnumerable<TSource>.All<TSource>(System.Func<TSource, bool>)";
-        readonly static string SumWithSelectorMethod = "System.Collections.Generic.IEnumerable<TSource>.Sum<TSource>(System.Func<TSource, int>)";
+        //readonly static string SumWithSelectorMethod = "System.Collections.Generic.IEnumerable<TSource>.Sum<TSource>(System.Func<TSource, int>)";
         readonly static string SumIntsMethod = "System.Collections.Generic.IEnumerable<int>.Sum()";
         readonly static string WhereMethod = "System.Collections.Generic.IEnumerable<TSource>.Where<TSource>(System.Func<TSource, bool>)";
         readonly static string SelectMethod = "System.Collections.Generic.IEnumerable<TSource>.Select<TSource, TResult>(System.Func<TSource, TResult>)";
