@@ -246,11 +246,28 @@ namespace RoslynLinqRewrite
             var arguments = CreateArguments(new[] { SyntaxFactory.Argument(SyntaxFactory.IdentifierName(ItemName)) }.Concat(currentFlow.Select(x => SyntaxFactory.Argument(SyntaxFactory.IdentifierName(x.Name)).WithRef(x.Changes))));
 
             var loopContent = CreateProcessingStep(chain, chain.Count - 1, SyntaxFactory.ParseTypeName(collectionItemType.ToDisplayString()), ItemName, arguments, noaggregation);
-            var foreachStatement = SyntaxFactory.ForEachStatement(
+
+            StatementSyntax foreachStatement;
+            if (collectionType.ToDisplayString().StartsWith("System.Collections.Generic.List<") || collectionType is IArrayTypeSymbol)
+            {
+                
+                foreachStatement = SyntaxFactory.ForStatement(
+                    SyntaxFactory.VariableDeclaration(CreatePrimitiveType(SyntaxKind.IntKeyword), CreateSeparatedList<VariableDeclaratorSyntax>( SyntaxFactory.VariableDeclarator("_index").WithInitializer(SyntaxFactory.EqualsValueClause( SyntaxFactory.LiteralExpression(SyntaxKind.NumericLiteralExpression, SyntaxFactory.Literal(0)))))), default( SeparatedSyntaxList<ExpressionSyntax>  ),
+                    SyntaxFactory.BinaryExpression(SyntaxKind.LessThanExpression, SyntaxFactory.IdentifierName("_index"), GetCollectionCount(collection, false)), CreateSeparatedList<ExpressionSyntax>(SyntaxFactory.PostfixUnaryExpression(SyntaxKind.PostIncrementExpression, SyntaxFactory.IdentifierName("_index"))),
+                    SyntaxFactory.Block( new StatementSyntax[] { CreateLocalVariableDeclaration(ItemName, SyntaxFactory.ElementAccessExpression(SyntaxFactory.IdentifierName(ItemsName), SyntaxFactory.BracketedArgumentList(CreateSeparatedList(SyntaxFactory.Argument(SyntaxFactory.IdentifierName("_index")))))) }.Union((loopContent as BlockSyntax)?.Statements ?? (IEnumerable<StatementSyntax>)new[] { loopContent })));
+            }
+            else
+            {
+                foreachStatement = SyntaxFactory.ForEachStatement(
                 SyntaxFactory.IdentifierName("var"),
                 ItemName,
                 SyntaxFactory.IdentifierName(ItemsName),
                 loopContent is BlockSyntax ? loopContent : SyntaxFactory.Block(loopContent));
+
+            }
+
+
+
             var coreFunction = SyntaxFactory.MethodDeclaration(returnType, functionName)
                         .WithParameterList(CreateParameters(parameters))
                         .WithBody(SyntaxFactory.Block(prologue.Concat(new[] {
@@ -386,6 +403,10 @@ namespace RoslynLinqRewrite
             throw new NotImplementedException();
         }
         private static SeparatedSyntaxList<T> CreateSeparatedList<T>(IEnumerable<T> items) where T : SyntaxNode
+        {
+            return SyntaxFactory.SeparatedList<T>(items);
+        }
+        private static SeparatedSyntaxList<T> CreateSeparatedList<T>(params T[] items) where T : SyntaxNode
         {
             return SyntaxFactory.SeparatedList<T>(items);
         }
