@@ -79,7 +79,7 @@ namespace RoslynLinqRewrite
                         }
                         else break;
                     }
-
+                    if (!chain.Any(x => x.Arguments.Any(y => y is AnonymousFunctionExpressionSyntax))) return null;
 
                     var flowsIn = new List<ISymbol>();
                     var flowsOut = new List<ISymbol>();
