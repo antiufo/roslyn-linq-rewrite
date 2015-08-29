@@ -121,10 +121,9 @@ namespace RoslynLinqRewrite
 
 
 
-                    var returnType = SyntaxFactory.ParseTypeName(semanticReturnType.ToDisplayString());
 
                     var aggregationMethod = methodNames[0];
-                    return TryRewrite(aggregationMethod, collection, returnType, chain, node);
+                    return TryRewrite(aggregationMethod, collection, semanticReturnType, chain, node);
                 }
             }
             return null;
@@ -241,8 +240,8 @@ namespace RoslynLinqRewrite
             if (additionalParameters != null) parameters = parameters.Concat(additionalParameters.Select(x => x.Item1));
 
             var collectionType = semantic.GetTypeInfo(collection).Type;
-            var collectionItemType = collectionType is IArrayTypeSymbol ? ((IArrayTypeSymbol)collectionType).ElementType : collectionType.AllInterfaces.Concat(new[] { collectionType }).OfType<INamedTypeSymbol>().First(x => x.IsGenericType && x.ConstructUnboundGenericType().ToString() == "System.Collections.Generic.IEnumerable<>").TypeArguments.First();
-
+            var collectionItemType = GetItemType(collectionType);
+            if (collectionItemType == null) throw new NotSupportedException();
             var functionName = "ProceduralLinq" + ++lastId;
             var arguments = CreateArguments(new[] { SyntaxFactory.Argument(SyntaxFactory.IdentifierName(ItemName)) }.Concat(currentFlow.Select(x => SyntaxFactory.Argument(SyntaxFactory.IdentifierName(x.Name)).WithRef(x.Changes))));
 
@@ -269,6 +268,11 @@ namespace RoslynLinqRewrite
 
             currentAggregation = old;
             return inv;
+        }
+
+        private ITypeSymbol GetItemType(ITypeSymbol collectionType)
+        {
+            return collectionType is IArrayTypeSymbol ? ((IArrayTypeSymbol)collectionType).ElementType : collectionType.AllInterfaces.Concat(new[] { collectionType }).OfType<INamedTypeSymbol>().FirstOrDefault(x => x.IsGenericType && x.ConstructUnboundGenericType().ToString() == "System.Collections.Generic.IEnumerable<>")?.TypeArguments.First();
         }
 
         private static PredefinedTypeSyntax CreatePrimitiveType(SyntaxKind keyword)
