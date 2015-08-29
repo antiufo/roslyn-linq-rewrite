@@ -19,5 +19,10 @@ namespace RoslynLinqRewrite
         public string MethodName { get; }
         public IReadOnlyList<ExpressionSyntax> Arguments { get; }
         public InvocationExpressionSyntax Invocation { get; }
+
+        public override string ToString()
+        {
+            return MethodName;
+        }
     }
 }
