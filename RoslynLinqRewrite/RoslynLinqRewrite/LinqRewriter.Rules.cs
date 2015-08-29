@@ -16,7 +16,7 @@ namespace RoslynLinqRewrite
         {
             var returnType = SyntaxFactory.ParseTypeName(semanticReturnType.ToDisplayString());
 
-            if (aggregationMethod == WhereMethod || aggregationMethod == SelectMethod || aggregationMethod == CastMethod || aggregationMethod == OfTypeMethod)
+            if (RootMethodsThatRequireYieldReturn.Contains(aggregationMethod))
             {
                 return RewriteAsLoop(
                     returnType,
@@ -218,10 +218,12 @@ namespace RoslynLinqRewrite
 
             if (aggregationMethod == ToListMethod || aggregationMethod == ReverseMethod)
             {
+                var count = chain.All(x => MethodsThatPreserveCount.Contains(x.MethodName)) ? GetCollectionCount(collection, true) : null;
+
                 var listIdentifier = SyntaxFactory.IdentifierName("_list");
                 return RewriteAsLoop(
                     returnType,
-                    new[] { CreateLocalVariableDeclaration("_list", SyntaxFactory.ObjectCreationExpression(SyntaxFactory.ParseTypeName("System.Collections.Generic.List<"+ GetItemType(semanticReturnType).ToDisplayString() +">"), CreateArguments(Enumerable.Empty<ArgumentSyntax>()), null)) },
+                    new[] { CreateLocalVariableDeclaration("_list", SyntaxFactory.ObjectCreationExpression(SyntaxFactory.ParseTypeName("System.Collections.Generic.List<" + GetItemType(semanticReturnType).ToDisplayString() + ">"), CreateArguments(count != null ? new[] { count } : Enumerable.Empty<ExpressionSyntax>()), null)) },
                     aggregationMethod == ReverseMethod ? new StatementSyntax[] { SyntaxFactory.ExpressionStatement(SyntaxFactory.InvocationExpression(SyntaxFactory.MemberAccessExpression(SyntaxKind.SimpleMemberAccessExpression, SyntaxFactory.IdentifierName("_list"), SyntaxFactory.IdentifierName("Reverse")))), SyntaxFactory.ReturnStatement(listIdentifier) } : new[] { SyntaxFactory.ReturnStatement(listIdentifier) },
                     collection,
                     chain,
@@ -259,66 +261,46 @@ namespace RoslynLinqRewrite
 
             if (aggregationMethod == ToArrayMethod)
             {
-                var listIdentifier = SyntaxFactory.IdentifierName("_list");
-                var listType = SyntaxFactory.ParseTypeName("System.Collections.Generic.List<" + ((ArrayTypeSyntax)returnType).ElementType + ">");
-                return RewriteAsLoop(
-                    returnType,
-                    new[] { CreateLocalVariableDeclaration("_list", SyntaxFactory.ObjectCreationExpression(listType, CreateArguments(Enumerable.Empty<ArgumentSyntax>()), null)) },
-                    new[] { SyntaxFactory.ReturnStatement(SyntaxFactory.InvocationExpression(SyntaxFactory.MemberAccessExpression(SyntaxKind.SimpleMemberAccessExpression, listIdentifier, SyntaxFactory.IdentifierName("ToArray")))) },
-                    collection,
-                    chain,
-                    (inv, arguments, param) =>
-                    {
-                        return CreateStatement(SyntaxFactory.InvocationExpression(SyntaxFactory.MemberAccessExpression(SyntaxKind.SimpleMemberAccessExpression, listIdentifier, SyntaxFactory.IdentifierName("Add")), CreateArguments(new[] { SyntaxFactory.IdentifierName(param.Identifier.ValueText) })));
-                    }
-                );
+                var count = chain.All(x => MethodsThatPreserveCount.Contains(x.MethodName)) ? GetCollectionCount(collection, false) : null;
+
+                if (count != null)
+                {
+                    var arrayIdentifier = SyntaxFactory.IdentifierName("_array");
+                    return RewriteAsLoop(
+                        returnType,
+                        new[] { CreateLocalVariableDeclaration("_array", SyntaxFactory.ArrayCreationExpression(SyntaxFactory.ArrayType(((ArrayTypeSyntax)returnType).ElementType, SyntaxFactory.List(new[] { SyntaxFactory.ArrayRankSpecifier(CreateSeparatedList(new[] { count })) })))) },
+                        new[] { SyntaxFactory.ReturnStatement(arrayIdentifier) },
+                        collection,
+                        chain,
+                        (inv, arguments, param) =>
+                        {
+                            return CreateStatement(SyntaxFactory.AssignmentExpression(SyntaxKind.SimpleAssignmentExpression, SyntaxFactory.ElementAccessExpression(arrayIdentifier, SyntaxFactory.BracketedArgumentList(CreateSeparatedList(new[] { SyntaxFactory.Argument(SyntaxFactory.IdentifierName("_index")) }))), SyntaxFactory.IdentifierName(param.Identifier.ValueText)));
+                        }
+                    );
+
+                }
+                else
+                {
+                    var listIdentifier = SyntaxFactory.IdentifierName("_list");
+                    var listType = SyntaxFactory.ParseTypeName("System.Collections.Generic.List<" + ((ArrayTypeSyntax)returnType).ElementType + ">");
+                    return RewriteAsLoop(
+                        returnType,
+                        new[] { CreateLocalVariableDeclaration("_list", SyntaxFactory.ObjectCreationExpression(listType, CreateArguments(Enumerable.Empty<ArgumentSyntax>()), null)) },
+                        new[] { SyntaxFactory.ReturnStatement(SyntaxFactory.InvocationExpression(SyntaxFactory.MemberAccessExpression(SyntaxKind.SimpleMemberAccessExpression, listIdentifier, SyntaxFactory.IdentifierName("ToArray")))) },
+                        collection,
+                        chain,
+                        (inv, arguments, param) =>
+                        {
+                            return CreateStatement(SyntaxFactory.InvocationExpression(SyntaxFactory.MemberAccessExpression(SyntaxKind.SimpleMemberAccessExpression, listIdentifier, SyntaxFactory.IdentifierName("Add")), CreateArguments(new[] { SyntaxFactory.IdentifierName(param.Identifier.ValueText) })));
+                        }
+                    );
+                }
             }
+        
 #if false
 
+            
 
-                    if (IsMethodSequence(SumWithSelectorMethod, WhereMethod))
-                    {
-                        string itemArg = null;
-                        return RewriteAsLoop(
-                            CreatePrimitiveType(SyntaxKind.IntKeyword),
-                            new[] { CreateLocalVariableDeclaration("sum_", SyntaxFactory.LiteralExpression(SyntaxKind.NumericLiteralExpression, SyntaxFactory.Literal(0))) },
-                            arguments =>
-                            {
-                                return SyntaxFactory.IfStatement(
-                                InlineOrCreateMethod((CSharpSyntaxNode)Visit(lambda.Body), arguments, CreateParameter(arg.Identifier, itemType), out itemArg),
-                                SyntaxFactory.ExpressionStatement(SyntaxFactory.AssignmentExpression(SyntaxKind.AddAssignmentExpression, SyntaxFactory.IdentifierName("sum_"),
-                                     InlineOrCreateMethod((CSharpSyntaxNode)Visit(lambda.Body), arguments, CreateParameter(arg.Identifier, itemType), out itemArg)))
-                                     );
-
-                            },
-                            new[] { SyntaxFactory.ReturnStatement(SyntaxFactory.IdentifierName("sum_")) },
-                            () => itemArg,
-                            collection
-                        );
-
-                    }
-
- 
-
-                    if (GetMethodFullName(node) == WhereMethod)
-                    {
-
-                        string itemArg = null;
-                        return RewriteAsLoop(
-                            SyntaxFactory.ParseTypeName("System.Collections.Generic.IEnumerable<" + itemType.ToDisplayString() + ">"),
-                            Enumerable.Empty<StatementSyntax>(),
-                            arguments =>
-                            {
-                                return SyntaxFactory.IfStatement(
-                                 InlineOrCreateMethod((CSharpSyntaxNode)Visit(lambda.Body), arguments, CreateParameter(arg.Identifier, itemType), out itemArg),
-                                 SyntaxFactory.YieldStatement(SyntaxKind.YieldReturnStatement, SyntaxFactory.IdentifierName(arg.Identifier))
-                             );
-                            },
-                            Enumerable.Empty<StatementSyntax>(),
-                            () => itemArg,
-                            collection
-                        );
-                    }
 
                     if (GetMethodFullName(node) == SumWithSelectorMethod)
                     {
@@ -366,6 +348,51 @@ namespace RoslynLinqRewrite
                         );
                     }
 #endif
+            return null;
+        }
+
+        private ExpressionSyntax GetCollectionCount(ExpressionSyntax collection, bool allowUnknown)
+        {
+            var collectionType = semantic.GetTypeInfo(collection).Type;
+            if (collectionType is IArrayTypeSymbol)
+            {
+                return SyntaxFactory.MemberAccessExpression(SyntaxKind.SimpleMemberAccessExpression, SyntaxFactory.IdentifierName(ItemsName), SyntaxFactory.IdentifierName("Length"));
+            }
+            if (collectionType.ToDisplayString().StartsWith("System.Collections.Generic.IReadOnlyCollection<") || collectionType.AllInterfaces.Any(x => x.ToDisplayString().StartsWith("System.Collections.Generic.IReadOnlyCollection<")))
+            {
+                return SyntaxFactory.MemberAccessExpression(SyntaxKind.SimpleMemberAccessExpression, SyntaxFactory.IdentifierName(ItemsName), SyntaxFactory.IdentifierName("Count"));
+            }
+            if (collectionType.ToDisplayString().StartsWith("System.Collections.Generic.ICollection<") || collectionType.AllInterfaces.Any(x => x.ToDisplayString().StartsWith("System.Collections.Generic.ICollection<")))
+            {
+                return SyntaxFactory.MemberAccessExpression(SyntaxKind.SimpleMemberAccessExpression, SyntaxFactory.IdentifierName(ItemsName), SyntaxFactory.IdentifierName("Count"));
+            }
+            if (allowUnknown) {
+                var items = new int[] { };
+                var itemType = GetItemType(collectionType);
+                return
+                    SyntaxFactory.InvocationExpression(
+                        SyntaxFactory.MemberAccessExpression(
+                            SyntaxKind.SimpleMemberAccessExpression, 
+                            SyntaxFactory.ParenthesizedExpression(
+                                SyntaxFactory.ConditionalAccessExpression(
+                                    SyntaxFactory.ParenthesizedExpression(
+                                        SyntaxFactory.BinaryExpression(
+                                            SyntaxKind.AsExpression,
+                                            SyntaxFactory.IdentifierName(ItemsName),
+                                            SyntaxFactory.ParseTypeName("System.Collections.Generic.Collection<"+itemType.ToDisplayString()+">")
+                                        )
+                                    ),
+                                    SyntaxFactory.MemberBindingExpression(
+                                        SyntaxFactory.IdentifierName("Count")
+                                    )
+                                )
+                            ),
+                            SyntaxFactory.IdentifierName("GetValueOrDefault")
+                        )
+                    );
+
+                var k = ((items as ICollection<int>)?.Count).GetValueOrDefault();
+            }
             return null;
         }
 
@@ -506,7 +533,11 @@ namespace RoslynLinqRewrite
         readonly static string SelectMethod = "System.Collections.Generic.IEnumerable<TSource>.Select<TSource, TResult>(System.Func<TSource, TResult>)";
         readonly static string CastMethod = "System.Collections.IEnumerable.Cast<TResult>()";
         readonly static string OfTypeMethod = "System.Collections.IEnumerable.OfType<TResult>()";
-
-
+        readonly static string[] RootMethodsThatRequireYieldReturn = new[] {
+            WhereMethod, SelectMethod, CastMethod, OfTypeMethod
+        };
+        readonly static string[] MethodsThatPreserveCount = new[] {
+            SelectMethod, CastMethod, ReverseMethod, ToListMethod, ToArrayMethod /*OrderBy*/
+        };
     }
 }
