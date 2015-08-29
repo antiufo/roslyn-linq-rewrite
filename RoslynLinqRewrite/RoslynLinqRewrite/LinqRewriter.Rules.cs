@@ -43,14 +43,71 @@ namespace RoslynLinqRewrite
                     MaybeAddSelect(chain, node.ArgumentList.Arguments.Count != 0),
                     (inv, arguments, param) =>
                     {
-
-                        ExpressionSyntax currentValue = SyntaxFactory.IdentifierName(param.Identifier.ValueText);
-                        if (elementType != returnType) currentValue = SyntaxFactory.InvocationExpression(SyntaxFactory.MemberAccessExpression(SyntaxKind.SimpleMemberAccessExpression, currentValue, SyntaxFactory.IdentifierName("GetValueOrDefault"))); 
-                        var sum = SyntaxFactory.ExpressionStatement(SyntaxFactory.AssignmentExpression(SyntaxKind.AddAssignmentExpression, SyntaxFactory.IdentifierName("sum_"), currentValue));
-                        return elementType == returnType ? sum : (StatementSyntax)SyntaxFactory.IfStatement(SyntaxFactory.BinaryExpression(SyntaxKind.NotEqualsExpression, SyntaxFactory.IdentifierName(param.Identifier.ValueText), SyntaxFactory.LiteralExpression(SyntaxKind.NullLiteralExpression)), sum);
+                        var currentValue = SyntaxFactory.IdentifierName(param.Identifier.ValueText);
+                        return IfNullableIsNotNull(elementType != returnType, currentValue, x =>
+                        {
+                            return SyntaxFactory.ExpressionStatement(SyntaxFactory.AssignmentExpression(SyntaxKind.AddAssignmentExpression, SyntaxFactory.IdentifierName("sum_"), currentValue));
+                        });
                     }
                 );
             }
+
+
+
+            if (aggregationMethod.Contains(".Average"))
+            {
+                var elementType = ((returnType as NullableTypeSyntax)?.ElementType ?? returnType);
+                var primitive = ((PredefinedTypeSyntax)elementType).Keyword.Kind();
+
+                ExpressionSyntax sumIdentifier = SyntaxFactory.IdentifierName("sum_");
+                ExpressionSyntax countIdentifier = SyntaxFactory.IdentifierName("count_");
+
+                if (primitive != SyntaxKind.DecimalKeyword)
+                {
+                    sumIdentifier = SyntaxFactory.CastExpression(CreatePrimitiveType(SyntaxKind.DoubleKeyword), sumIdentifier);
+                    countIdentifier = SyntaxFactory.CastExpression(CreatePrimitiveType(SyntaxKind.DoubleKeyword), countIdentifier);
+                }
+                ExpressionSyntax division = SyntaxFactory.BinaryExpression(SyntaxKind.DivideExpression, sumIdentifier, countIdentifier);
+                if (primitive != SyntaxKind.DoubleKeyword && primitive != SyntaxKind.DecimalKeyword)
+                {
+                    division = SyntaxFactory.CastExpression(elementType, SyntaxFactory.ParenthesizedExpression(division));
+                }
+
+                return RewriteAsLoop(
+                    returnType,
+                    new[] {
+                        CreateLocalVariableDeclaration("sum_", SyntaxFactory.CastExpression(primitive == SyntaxKind.IntKeyword || primitive==SyntaxKind.LongKeyword ? CreatePrimitiveType(SyntaxKind.LongKeyword) : primitive == SyntaxKind.DecimalKeyword ? CreatePrimitiveType(SyntaxKind.DecimalKeyword) : CreatePrimitiveType(SyntaxKind.DoubleKeyword), SyntaxFactory.LiteralExpression(SyntaxKind.NumericLiteralExpression, SyntaxFactory.Literal(0)))),
+                        CreateLocalVariableDeclaration("count_", SyntaxFactory.LiteralExpression(SyntaxKind.NumericLiteralExpression, SyntaxFactory.ParseToken("0L")))
+                    },
+                    new[] {
+                        SyntaxFactory.Block(
+                        SyntaxFactory.IfStatement(SyntaxFactory.BinaryExpression(SyntaxKind.EqualsExpression,
+                            SyntaxFactory.IdentifierName("count_"),
+                            SyntaxFactory.LiteralExpression(SyntaxKind.NumericLiteralExpression, SyntaxFactory.ParseToken("0"))),
+                            returnType == elementType ? (StatementSyntax)CreateThrowException("System.InvalidOperationException", "The sequence did not contain any elements.") :
+                            SyntaxFactory.ReturnStatement(SyntaxFactory.LiteralExpression(SyntaxKind.NullLiteralExpression))
+                        ),
+                         SyntaxFactory.ReturnStatement(division)
+                        )
+                    },
+                    collection,
+                    MaybeAddSelect(chain, node.ArgumentList.Arguments.Count != 0),
+                    (inv, arguments, param) =>
+                    {
+                        var currentValue = SyntaxFactory.IdentifierName(param.Identifier.ValueText);
+                        return IfNullableIsNotNull(elementType != returnType, currentValue, x =>
+                        {
+                            return SyntaxFactory.Block(
+                                SyntaxFactory.ExpressionStatement(SyntaxFactory.PostfixUnaryExpression(SyntaxKind.PostIncrementExpression, SyntaxFactory.IdentifierName("count_"))),
+                                SyntaxFactory.ExpressionStatement(SyntaxFactory.AssignmentExpression(SyntaxKind.AddAssignmentExpression, SyntaxFactory.IdentifierName("sum_"), x))
+                            );
+                        });
+                    }
+                );
+            }
+
+
+
 
             if (aggregationMethod == AnyMethod || aggregationMethod == AnyWithConditionMethod)
             {
@@ -355,7 +412,11 @@ namespace RoslynLinqRewrite
             return null;
         }
 
-
+        private StatementSyntax IfNullableIsNotNull(bool nullable, IdentifierNameSyntax currentValue, Func<ExpressionSyntax, StatementSyntax> p)
+        {
+            var k = nullable ? (ExpressionSyntax)SyntaxFactory.InvocationExpression(SyntaxFactory.MemberAccessExpression(SyntaxKind.SimpleMemberAccessExpression, currentValue, SyntaxFactory.IdentifierName("GetValueOrDefault"))) : currentValue;
+            return nullable ? (StatementSyntax)SyntaxFactory.IfStatement(SyntaxFactory.BinaryExpression(SyntaxKind.NotEqualsExpression, currentValue, SyntaxFactory.LiteralExpression(SyntaxKind.NullLiteralExpression)), p(k)) : p(k);
+        }
 
         private ExpressionSyntax GetCollectionCount(ExpressionSyntax collection, bool allowUnknown)
         {
