@@ -158,7 +158,7 @@ namespace RoslynLinqRewrite
                 );
             }
 
-            if (aggregationMethod == ListForEachMethod)
+            if (aggregationMethod == ListForEachMethod || aggregationMethod==ShamanListForEachMethod)
             {
                 return RewriteAsLoop(
                     CreatePrimitiveType(SyntaxKind.VoidKeyword),
@@ -678,6 +678,7 @@ namespace RoslynLinqRewrite
         readonly static string ContainsMethod = "System.Collections.Generic.IEnumerable<TSource>.Contains<TSource>(TSource)";
 
         readonly static string ListForEachMethod = "System.Collections.Generic.List<T>.ForEach(System.Action<T>)";
+        readonly static string ShamanListForEachMethod = "System.Collections.Generic.IEnumerable<T>.ForEach<T>(System.Action<T>)";
 
         readonly static string WhereMethod = "System.Collections.Generic.IEnumerable<TSource>.Where<TSource>(System.Func<TSource, bool>)";
         readonly static string SelectMethod = "System.Collections.Generic.IEnumerable<TSource>.Select<TSource, TResult>(System.Func<TSource, TResult>)";
