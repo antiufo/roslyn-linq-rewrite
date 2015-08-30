@@ -16,8 +16,9 @@ namespace RoslynLinqRewrite
         {
             if (true)
             {
-                //CompileSolution(@"D:\Repositories\shaman-fizzler\Fizzler.sln", "Fizzler");
-                CompileSolution(@"C:\Repositories\Awdee\Shaman.ApiServer.sln", "Shaman.Core");
+                CompileSolution(@"D:\Repositories\shaman-fizzler\Fizzler.sln", "Fizzler", false);
+                //CompileSolution(@"C:\Repositories\Awdee\Shaman.ApiServer.sln", "Shaman.Core");
+                //CompileSolution(@"C:\Repositories\Awdee\Shaman.ApiServer.sln", "Shaman.Inferring.FullLogic", true);
                 return;
             }
 
@@ -25,7 +26,9 @@ namespace RoslynLinqRewrite
 
             var code = @"
 using System;
+using System.Collections.Generic;
 using System.Linq;
+using Shaman;
 
 class Meow
 {
@@ -75,7 +78,7 @@ var k = arr2.Where(x => x.StartsWith(""t"")).Select(x=>x==""miao"").LastOrDefaul
             }
         }
 
-        private static void CompileSolution(string path, string projectName)
+        private static void CompileSolution(string path, string projectName, bool writeFiles)
         {
             var workspace = MSBuildWorkspace.Create();
             Solution solution = null;
@@ -106,12 +109,13 @@ var k = arr2.Where(x => x.StartsWith(""t"")).Select(x=>x==""miao"").LastOrDefaul
                 var rewriter = new LinqRewriter(project, comp.GetSemanticModel(syntaxTree), doc.Id);
 
                 var rewritten = rewriter.Visit(syntaxTree.GetRoot()).NormalizeWhitespace();
-                var tostring = rewritten.ToString();
-                if (syntaxTree.ToString() != tostring)
+                if (writeFiles)
                 {
-                    //File.WriteAllText(@"C:\temp\roslynrewrite\" + doc.Name, rewritten.SyntaxTree.ToString(), Encoding.UTF8);
-                    File.WriteAllText(doc.FilePath, tostring, Encoding.UTF8);
-                    //Console.WriteLine(rewritten.ToString());
+                    var tostring = rewritten.ToFullString();
+                    if (syntaxTree.ToString() != tostring)
+                    {
+                        File.WriteAllText(doc.FilePath, tostring, Encoding.UTF8);
+                    }
                 }
                 updatedProject = updatedProject.GetDocument(doc.Id).WithSyntaxRoot(rewritten).Project;
 
