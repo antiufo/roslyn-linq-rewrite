@@ -425,6 +425,10 @@ namespace RoslynLinqRewrite
         {
             return CreateArguments(items.Select(x => SyntaxFactory.Argument(x)));
         }
+        private static ArgumentListSyntax CreateArguments(params ExpressionSyntax[] items)
+        {
+            return CreateArguments((IEnumerable<ExpressionSyntax>)items);
+        }
         private static ArgumentListSyntax CreateArguments(IEnumerable<ArgumentSyntax> items)
         {
             return SyntaxFactory.ArgumentList(CreateSeparatedList(items));

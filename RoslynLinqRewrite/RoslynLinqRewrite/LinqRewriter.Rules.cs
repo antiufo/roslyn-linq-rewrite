@@ -79,14 +79,14 @@ namespace RoslynLinqRewrite
                         return IfNullableIsNotNull(elementType != returnType, identifierNameSyntax, x =>
                         {
                             var assignmentExpressionSyntax = SyntaxFactory.AssignmentExpression(SyntaxKind.SimpleAssignmentExpression, SyntaxFactory.IdentifierName(minmax), x);
-                            return SyntaxFactory.IfStatement( SyntaxFactory.IdentifierName("found_"),
-                               SyntaxFactory.Block( SyntaxFactory.IfStatement(SyntaxFactory.BinaryExpression(aggregationMethod.Contains(".Max") ? SyntaxKind.GreaterThanExpression : SyntaxKind.LessThanExpression, x, SyntaxFactory.IdentifierName(minmax)), SyntaxFactory.ExpressionStatement(assignmentExpressionSyntax))), 
-                               SyntaxFactory.ElseClause(SyntaxFactory.Block(SyntaxFactory.ExpressionStatement(SyntaxFactory.AssignmentExpression(SyntaxKind.SimpleAssignmentExpression, SyntaxFactory.IdentifierName("found_"), SyntaxFactory.LiteralExpression(SyntaxKind.TrueLiteralExpression))) ,SyntaxFactory.ExpressionStatement(assignmentExpressionSyntax))));
+                            return SyntaxFactory.IfStatement(SyntaxFactory.IdentifierName("found_"),
+                               SyntaxFactory.Block(SyntaxFactory.IfStatement(SyntaxFactory.BinaryExpression(aggregationMethod.Contains(".Max") ? SyntaxKind.GreaterThanExpression : SyntaxKind.LessThanExpression, x, SyntaxFactory.IdentifierName(minmax)), SyntaxFactory.ExpressionStatement(assignmentExpressionSyntax))),
+                               SyntaxFactory.ElseClause(SyntaxFactory.Block(SyntaxFactory.ExpressionStatement(SyntaxFactory.AssignmentExpression(SyntaxKind.SimpleAssignmentExpression, SyntaxFactory.IdentifierName("found_"), SyntaxFactory.LiteralExpression(SyntaxKind.TrueLiteralExpression))), SyntaxFactory.ExpressionStatement(assignmentExpressionSyntax))));
                         });
                     });
             }
 
-            
+
             if (aggregationMethod.Contains(".Average"))
             {
                 var elementType = ((returnType as NullableTypeSyntax)?.ElementType ?? returnType);
@@ -155,6 +155,26 @@ namespace RoslynLinqRewrite
                     {
                         return SyntaxFactory.ReturnStatement(SyntaxFactory.LiteralExpression(SyntaxKind.TrueLiteralExpression));
                     }
+                );
+            }
+            if (aggregationMethod == ContainsMethod)
+            {
+                var elementType = SyntaxFactory.ParseTypeName(semantic.GetTypeInfo(node.ArgumentList.Arguments.First().Expression).ConvertedType.ToDisplayString());
+                var comparerIdentifier = ((elementType as NullableTypeSyntax)?.ElementType ?? elementType) is PredefinedTypeSyntax ? null : SyntaxFactory.IdentifierName("comparer_");
+                return RewriteAsLoop(
+                    CreatePrimitiveType(SyntaxKind.BoolKeyword),
+                    comparerIdentifier != null ? new StatementSyntax[] { CreateLocalVariableDeclaration("comparer_", SyntaxFactory.ParseExpression("System.Collections.Generic.EqualityComparer<" + elementType.ToString() + ">.Default")) } : Enumerable.Empty<StatementSyntax>(),
+                    new[] { SyntaxFactory.ReturnStatement(SyntaxFactory.LiteralExpression(SyntaxKind.FalseLiteralExpression)) },
+                    collection,
+                    chain,
+                    (inv, arguments, param) =>
+                    {
+                        var target = SyntaxFactory.IdentifierName("_target");
+                        var current = SyntaxFactory.IdentifierName(param.Identifier.ValueText);
+                        var condition = comparerIdentifier != null ? SyntaxFactory.InvocationExpression(SyntaxFactory.MemberAccessExpression(SyntaxKind.SimpleMemberAccessExpression, comparerIdentifier, SyntaxFactory.IdentifierName("Equals")), CreateArguments(current, target)) : (ExpressionSyntax)SyntaxFactory.BinaryExpression(SyntaxKind.EqualsExpression, current, target);
+                        return SyntaxFactory.IfStatement(condition, SyntaxFactory.ReturnStatement(SyntaxFactory.LiteralExpression(SyntaxKind.TrueLiteralExpression)));
+                    },
+                    additionalParameters: new[] { Tuple.Create(CreateParameter("_target", elementType), node.ArgumentList.Arguments.First().Expression) }
                 );
             }
 
@@ -639,7 +659,7 @@ namespace RoslynLinqRewrite
 
 
 
-
+        readonly static string ContainsMethod = "System.Collections.Generic.IEnumerable<TSource>.Contains<TSource>(TSource)";
 
         readonly static string WhereMethod = "System.Collections.Generic.IEnumerable<TSource>.Where<TSource>(System.Func<TSource, bool>)";
         readonly static string SelectMethod = "System.Collections.Generic.IEnumerable<TSource>.Select<TSource, TResult>(System.Func<TSource, TResult>)";
