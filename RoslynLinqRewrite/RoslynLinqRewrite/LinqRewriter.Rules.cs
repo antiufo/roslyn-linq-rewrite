@@ -12,7 +12,7 @@ namespace RoslynLinqRewrite
     public partial class LinqRewriter : CSharpSyntaxRewriter
     {
 
-        private SyntaxNode TryRewrite(string aggregationMethod, ExpressionSyntax collection, ITypeSymbol semanticReturnType, List<LinqStep> chain, InvocationExpressionSyntax node)
+        private ExpressionSyntax TryRewrite(string aggregationMethod, ExpressionSyntax collection, ITypeSymbol semanticReturnType, List<LinqStep> chain, InvocationExpressionSyntax node)
         {
             var returnType = SyntaxFactory.ParseTypeName(semanticReturnType.ToDisplayString());
 
@@ -158,7 +158,7 @@ namespace RoslynLinqRewrite
                 );
             }
 
-            if (aggregationMethod == ListForEachMethod || aggregationMethod==ShamanListForEachMethod)
+            if (aggregationMethod == ListForEachMethod || aggregationMethod == IEnumerableForEachMethod)
             {
                 return RewriteAsLoop(
                     CreatePrimitiveType(SyntaxKind.VoidKeyword),
@@ -168,7 +168,8 @@ namespace RoslynLinqRewrite
                     chain,
                     (inv, arguments, param) =>
                     {
-                        return SyntaxFactory.ExpressionStatement(InlineOrCreateMethod((AnonymousFunctionExpressionSyntax)inv.Arguments.First(), CreatePrimitiveType(SyntaxKind.VoidKeyword), arguments, param));
+                        var lambda = inv.Lambda ?? new Lambda((AnonymousFunctionExpressionSyntax)inv.Arguments.First());
+                        return SyntaxFactory.ExpressionStatement(InlineOrCreateMethod(lambda, CreatePrimitiveType(SyntaxKind.VoidKeyword), arguments, param));
                     }
                     );
             }
@@ -206,7 +207,7 @@ namespace RoslynLinqRewrite
                     (inv, arguments, param) =>
                     {
                         var lambda = (LambdaExpressionSyntax)inv.Arguments.First();
-                        return SyntaxFactory.IfStatement(SyntaxFactory.PrefixUnaryExpression(SyntaxKind.LogicalNotExpression, SyntaxFactory.ParenthesizedExpression(InlineOrCreateMethod(lambda, CreatePrimitiveType(SyntaxKind.BoolKeyword), arguments, param))),
+                        return SyntaxFactory.IfStatement(SyntaxFactory.PrefixUnaryExpression(SyntaxKind.LogicalNotExpression, SyntaxFactory.ParenthesizedExpression(InlineOrCreateMethod(new Lambda(lambda), CreatePrimitiveType(SyntaxKind.BoolKeyword), arguments, param))),
                          SyntaxFactory.ReturnStatement(SyntaxFactory.LiteralExpression(SyntaxKind.FalseLiteralExpression)
                          ));
                     }
@@ -380,9 +381,9 @@ namespace RoslynLinqRewrite
                         var keyLambda = (AnonymousFunctionExpressionSyntax)node.ArgumentList.Arguments.First().Expression;
                         var valueLambda = (AnonymousFunctionExpressionSyntax)node.ArgumentList.Arguments.ElementAtOrDefault(1).Expression;
                         return CreateStatement(SyntaxFactory.InvocationExpression(SyntaxFactory.MemberAccessExpression(SyntaxKind.SimpleMemberAccessExpression, dictIdentifier, SyntaxFactory.IdentifierName("Add")), CreateArguments(new[] {
-                            InlineOrCreateMethod(keyLambda, SyntaxFactory.ParseTypeName( GetLambdaReturnType(keyLambda).ToDisplayString()), arguments, param),
+                            InlineOrCreateMethod(new Lambda(keyLambda), SyntaxFactory.ParseTypeName( GetLambdaReturnType(keyLambda).ToDisplayString()), arguments, param),
                             aggregationMethod == ToDictionaryWithKeyValueMethod ?
-                            InlineOrCreateMethod(valueLambda, SyntaxFactory.ParseTypeName( GetLambdaReturnType(valueLambda).ToDisplayString()), arguments, param):
+                            InlineOrCreateMethod(new Lambda(valueLambda), SyntaxFactory.ParseTypeName( GetLambdaReturnType(valueLambda).ToDisplayString()), arguments, param):
                              SyntaxFactory.IdentifierName(param.Identifier.ValueText),
                         })));
                     }
@@ -575,7 +576,7 @@ namespace RoslynLinqRewrite
             {
                 var lambda = (AnonymousFunctionExpressionSyntax)step.Arguments[0];
 
-                var check = InlineOrCreateMethod(lambda, CreatePrimitiveType(SyntaxKind.BoolKeyword), arguments, CreateParameter(itemName, itemType));
+                var check = InlineOrCreateMethod(new Lambda(lambda), CreatePrimitiveType(SyntaxKind.BoolKeyword), arguments, CreateParameter(itemName, itemType));
                 var next = CreateProcessingStep(chain, chainIndex - 1, itemType, itemName, arguments, noAggregation);
                 return SyntaxFactory.IfStatement(check, next is BlockSyntax ? next : SyntaxFactory.Block(next));
             }
@@ -628,7 +629,7 @@ namespace RoslynLinqRewrite
                 var newtype = IsAnonymousType(lambdaBodyType) ? null : SyntaxFactory.ParseTypeName(lambdaBodyType.ToDisplayString());
 
 
-                var local = CreateLocalVariableDeclaration(newname, InlineOrCreateMethod(lambda, newtype, arguments, CreateParameter(itemName, itemType)));
+                var local = CreateLocalVariableDeclaration(newname, InlineOrCreateMethod(new Lambda(lambda), newtype, arguments, CreateParameter(itemName, itemType)));
 
 
                 var next = CreateProcessingStep(chain, chainIndex - 1, newtype, newname, arguments, noAggregation);
@@ -678,7 +679,7 @@ namespace RoslynLinqRewrite
         readonly static string ContainsMethod = "System.Collections.Generic.IEnumerable<TSource>.Contains<TSource>(TSource)";
 
         readonly static string ListForEachMethod = "System.Collections.Generic.List<T>.ForEach(System.Action<T>)";
-        readonly static string ShamanListForEachMethod = "System.Collections.Generic.IEnumerable<T>.ForEach<T>(System.Action<T>)";
+        readonly static string IEnumerableForEachMethod = "System.Collections.Generic.IEnumerable<T>.ForEach<T>(System.Action<T>)";
 
         readonly static string WhereMethod = "System.Collections.Generic.IEnumerable<TSource>.Where<TSource>(System.Func<TSource, bool>)";
         readonly static string SelectMethod = "System.Collections.Generic.IEnumerable<TSource>.Select<TSource, TResult>(System.Func<TSource, TResult>)";
