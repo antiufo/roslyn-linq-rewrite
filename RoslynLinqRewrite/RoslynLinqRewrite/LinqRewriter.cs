@@ -66,9 +66,11 @@ namespace RoslynLinqRewrite
                 var owner = node.AncestorsAndSelf().FirstOrDefault(x => x is MethodDeclarationSyntax);
                 if (owner == null) return null;
                 currentMethodIsStatic = semantic.GetDeclaredSymbol((MethodDeclarationSyntax)owner).IsStatic;
+                currentMethodName = ((MethodDeclarationSyntax)owner).Identifier.ValueText;
                 currentMethodTypeParameters = ((MethodDeclarationSyntax)owner).TypeParameterList;
                 currentMethodConstraintClauses = ((MethodDeclarationSyntax)owner).ConstraintClauses;
 
+                
                 if (IsSupportedMethod(GetMethodFullName(node)))
                 {
                     var chain = new List<LinqStep>();
@@ -94,6 +96,8 @@ namespace RoslynLinqRewrite
                     }
                     if (!chain.Any(x => x.Arguments.Any(y => y is AnonymousFunctionExpressionSyntax))) return null;
                     if (chain.Count == 1 && RootMethodsThatRequireYieldReturn.Contains(chain[0].MethodName)) return null;
+
+                    if (currentMethodName == "SetBlogConfigAsync") Debugger.Break();
 
                     var flowsIn = new List<ISymbol>();
                     var flowsOut = new List<ISymbol>();
@@ -179,7 +183,6 @@ namespace RoslynLinqRewrite
         }
 
 
-
         private bool IsAnonymousType(ITypeSymbol t)
         {
             return (t.ToDisplayString().Contains("anonymous type:"));
@@ -211,7 +214,7 @@ namespace RoslynLinqRewrite
             {
                 var sem = semantic.GetSymbolInfo(x).Symbol;
                 if (sem != null && (sem is ILocalSymbol || sem is IParameterSymbol) && sem.Name == oldparameter) return true;
-              //  if (sem.Symbol == oldsymbol) return true;
+                //  if (sem.Symbol == oldsymbol) return true;
                 return false;
             });
             var syntax = SyntaxFactory.ParenthesizedLambdaExpression(CreateParameters(container.Parameters.Select((x, i) => i == argIndex ? SyntaxFactory.Parameter(SyntaxFactory.Identifier(newname)).WithType(x.Type) : x)), container.Body.ReplaceNodes(tokensToRename, (a, b) =>
@@ -284,7 +287,8 @@ namespace RoslynLinqRewrite
             var collectionType = semantic.GetTypeInfo(collection).Type;
             var collectionItemType = GetItemType(collectionType);
             if (collectionItemType == null) throw new NotSupportedException();
-            var functionName = "ProceduralLinq" + ++lastId;
+
+            var functionName = GetUniqueName(currentMethodName + "_ProceduralLinq");
             var arguments = CreateArguments(new[] { SyntaxFactory.Argument(SyntaxFactory.IdentifierName(ItemName)) }.Concat(currentFlow.Select(x => SyntaxFactory.Argument(SyntaxFactory.IdentifierName(x.Name)).WithRef(x.Changes))));
 
             var loopContent = CreateProcessingStep(chain, chain.Count - 1, SyntaxFactory.ParseTypeName(collectionItemType.ToDisplayString()), ItemName, arguments, noaggregation);
@@ -329,6 +333,16 @@ namespace RoslynLinqRewrite
             return inv;
         }
 
+        private string GetUniqueName(string v)
+        {
+            for (int i = 1; ; i++)
+            {
+                var name = v + i;
+                if (methodsToAddToCurrentType.Any(x => x.Item2.Identifier.ValueText == name)) continue;
+                return name;
+            }
+        }
+
         private ITypeSymbol GetItemType(ITypeSymbol collectionType)
         {
             return collectionType is IArrayTypeSymbol ? ((IArrayTypeSymbol)collectionType).ElementType : collectionType.AllInterfaces.Concat(new[] { collectionType }).OfType<INamedTypeSymbol>().FirstOrDefault(x => x.IsGenericType && x.ConstructUnboundGenericType().ToString() == "System.Collections.Generic.IEnumerable<>")?.TypeArguments.First();
@@ -342,6 +356,7 @@ namespace RoslynLinqRewrite
         private List<Tuple<TypeDeclarationSyntax, MethodDeclarationSyntax>> methodsToAddToCurrentType = new List<Tuple<TypeDeclarationSyntax, MethodDeclarationSyntax>>();
         private int lastId;
         private bool currentMethodIsStatic;
+        private string currentMethodName;
         private IEnumerable<VariableCapture> currentFlow;
         private DocumentId docid;
 
@@ -408,7 +423,7 @@ namespace RoslynLinqRewrite
         private ExpressionSyntax InlineOrCreateMethod(CSharpSyntaxNode body, TypeSyntax returnType, ParameterSyntax param, IEnumerable<VariableCapture> captures)
         {
 
-            var fn = "ProceduralLinqHelper" + ++lastId;
+            var fn = GetUniqueName(currentMethodName + "_ProceduralLinqHelper");
 
             if (body is ExpressionSyntax && true)
             {
