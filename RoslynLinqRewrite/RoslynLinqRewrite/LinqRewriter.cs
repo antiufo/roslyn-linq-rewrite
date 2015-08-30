@@ -377,8 +377,13 @@ namespace RoslynLinqRewrite
             var collection = node.Expression;
             if (collection is InvocationExpressionSyntax && IsSupportedMethod(GetMethodFullName(collection)))
             {
-                var k = TryCatchVisitInvocationExpression((InvocationExpressionSyntax)collection, node);
-                if (k != null) return SyntaxFactory.ExpressionStatement(k);
+                var visitor = new CanRewrapForeachVisitor();
+                visitor.Visit(node.Statement);
+                if (!visitor.Fail)
+                {
+                    var k = TryCatchVisitInvocationExpression((InvocationExpressionSyntax)collection, node);
+                    if (k != null) return SyntaxFactory.ExpressionStatement(k);
+                }
             }
             return base.VisitForEachStatement(node);
         }
