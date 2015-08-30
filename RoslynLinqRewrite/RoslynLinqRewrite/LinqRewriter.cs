@@ -93,6 +93,7 @@ namespace RoslynLinqRewrite
                         });
                     }
                     if (!chain.Any(x => x.Arguments.Any(y => y is AnonymousFunctionExpressionSyntax))) return null;
+                    if (chain.Count == 1 && RootMethodsThatRequireYieldReturn.Contains(chain[0].MethodName)) return null;
 
                     var flowsIn = new List<ISymbol>();
                     var flowsOut = new List<ISymbol>();
