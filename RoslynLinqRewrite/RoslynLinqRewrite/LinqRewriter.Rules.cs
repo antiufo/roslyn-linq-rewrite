@@ -157,6 +157,22 @@ namespace RoslynLinqRewrite
                     }
                 );
             }
+
+            if (aggregationMethod == ListForEachMethod)
+            {
+                return RewriteAsLoop(
+                    CreatePrimitiveType(SyntaxKind.VoidKeyword),
+                    Enumerable.Empty<StatementSyntax>(),
+                    Enumerable.Empty<StatementSyntax>(),
+                    collection,
+                    chain,
+                    (inv, arguments, param) =>
+                    {
+                        return SyntaxFactory.ExpressionStatement(InlineOrCreateMethod((AnonymousFunctionExpressionSyntax)inv.Arguments.First(), CreatePrimitiveType(SyntaxKind.VoidKeyword), arguments, param));
+                    }
+                    );
+            }
+
             if (aggregationMethod == ContainsMethod)
             {
                 var elementType = SyntaxFactory.ParseTypeName(semantic.GetTypeInfo(node.ArgumentList.Arguments.First().Expression).ConvertedType.ToDisplayString());
@@ -660,6 +676,8 @@ namespace RoslynLinqRewrite
 
 
         readonly static string ContainsMethod = "System.Collections.Generic.IEnumerable<TSource>.Contains<TSource>(TSource)";
+
+        readonly static string ListForEachMethod = "System.Collections.Generic.List<T>.ForEach(System.Action<T>)";
 
         readonly static string WhereMethod = "System.Collections.Generic.IEnumerable<TSource>.Where<TSource>(System.Func<TSource, bool>)";
         readonly static string SelectMethod = "System.Collections.Generic.IEnumerable<TSource>.Select<TSource, TResult>(System.Func<TSource, TResult>)";
