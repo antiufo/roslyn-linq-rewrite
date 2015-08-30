@@ -161,6 +161,7 @@ namespace RoslynLinqRewrite
 
         private bool IsSupportedMethod(string v)
         {
+            if (v == null) return false;
             if (KnownMethods.Contains(v)) return true;
             if (!v.StartsWith("System.Collections.Generic.IEnumerable<")) return false;
             var k = v.Replace("<", "(");
