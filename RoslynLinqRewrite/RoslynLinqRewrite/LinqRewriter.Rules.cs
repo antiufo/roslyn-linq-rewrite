@@ -507,6 +507,7 @@ namespace RoslynLinqRewrite
             {
                 var items = new int[] { };
                 var itemType = GetItemType(collectionType);
+                if (itemType == null) return null;
                 return
                     SyntaxFactory.InvocationExpression(
                         SyntaxFactory.MemberAccessExpression(
