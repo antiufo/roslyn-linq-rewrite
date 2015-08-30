@@ -92,6 +92,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="ExtensionMethods.cs" />
+    <Compile Include="Lambda.cs" />
     <Compile Include="LinqRewriter.cs" />
     <Compile Include="LinqRewriter.Rules.cs" />
     <Compile Include="LinqStep.cs" />

@@ -10,6 +10,8 @@ namespace RoslynLinqRewrite
 {
     class LinqStep
     {
+        public Lambda Lambda { get; set; }
+
         public LinqStep(string methodName, IReadOnlyList<ExpressionSyntax> arguments, InvocationExpressionSyntax invocation = null)
         {
             this.MethodName = methodName;
