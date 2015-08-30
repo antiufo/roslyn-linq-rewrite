@@ -218,7 +218,7 @@ namespace RoslynLinqRewrite
             var invocation = syntax as InvocationExpressionSyntax;
             if (invocation != null)
             {
-                return (semantic.GetSymbolInfo(invocation.Expression).Symbol as IMethodSymbol)?.ConstructedFrom.ToString();
+                return (semantic.GetSymbolInfo(invocation.Expression).Symbol as IMethodSymbol)?.OriginalDefinition.ToDisplayString();
             }
             return null;
         }
