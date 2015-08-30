@@ -91,6 +91,7 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="CanRewrapForeachVisitor.cs" />
     <Compile Include="ExtensionMethods.cs" />
     <Compile Include="Lambda.cs" />
     <Compile Include="LinqRewriter.cs" />

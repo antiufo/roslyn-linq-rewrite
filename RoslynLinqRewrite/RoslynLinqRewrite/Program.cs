@@ -16,8 +16,8 @@ namespace RoslynLinqRewrite
         {
             if (true)
             {
-                CompileSolution(@"D:\Repositories\shaman-fizzler\Fizzler.sln", "Fizzler", false);
-                //CompileSolution(@"C:\Repositories\Awdee\Shaman.ApiServer.sln", "Shaman.Core");
+                //CompileSolution(@"D:\Repositories\shaman-fizzler\Fizzler.sln", "Fizzler", false);
+                CompileSolution(@"C:\Repositories\Awdee\Shaman.ApiServer.sln", "Shaman.Core", true);
                 //CompileSolution(@"C:\Repositories\Awdee\Shaman.ApiServer.sln", "Shaman.Inferring.FullLogic", true);
                 return;
             }
@@ -101,7 +101,7 @@ var k = arr2.Where(x => x.StartsWith(""t"")).Select(x=>x==""miao"").LastOrDefaul
             }
             
             var updatedProject = project;
-            foreach (var doc in project.Documents)
+            foreach (var doc in project.Documents.Where(x=>x.Name=="RestRequestHandler.cs"))
             {
                 Console.WriteLine(doc.FilePath);
                 var syntaxTree = doc.GetSyntaxTreeAsync().Result;
