@@ -518,7 +518,7 @@ namespace RoslynLinqRewrite
                                         SyntaxFactory.BinaryExpression(
                                             SyntaxKind.AsExpression,
                                             SyntaxFactory.IdentifierName(ItemsName),
-                                            SyntaxFactory.ParseTypeName("System.Collections.Generic.Collection<" + itemType.ToDisplayString() + ">")
+                                            SyntaxFactory.ParseTypeName("System.Collections.Generic.ICollection<" + itemType.ToDisplayString() + ">")
                                         )
                                     ),
                                     SyntaxFactory.MemberBindingExpression(
