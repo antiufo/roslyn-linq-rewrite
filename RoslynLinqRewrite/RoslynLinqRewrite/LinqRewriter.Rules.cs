@@ -79,8 +79,14 @@ namespace RoslynLinqRewrite
                         return IfNullableIsNotNull(elementType != returnType, identifierNameSyntax, x =>
                         {
                             var assignmentExpressionSyntax = SyntaxFactory.AssignmentExpression(SyntaxKind.SimpleAssignmentExpression, SyntaxFactory.IdentifierName(minmax), x);
+                            var condition = SyntaxFactory.BinaryExpression(aggregationMethod.Contains(".Max") ? SyntaxKind.GreaterThanExpression : SyntaxKind.LessThanExpression, x, SyntaxFactory.IdentifierName(minmax));
+                            var kind = (elementType as PredefinedTypeSyntax).Keyword.Kind();
+                            if (kind == SyntaxKind.DoubleKeyword || kind == SyntaxKind.FloatKeyword)
+                            {
+                                condition = SyntaxFactory.BinaryExpression(SyntaxKind.LogicalOrExpression, condition, SyntaxFactory.InvocationExpression(SyntaxFactory.MemberAccessExpression(SyntaxKind.SimpleMemberAccessExpression, elementType, SyntaxFactory.IdentifierName("IsNaN")), CreateArguments(x)));
+                            }
                             return SyntaxFactory.IfStatement(SyntaxFactory.IdentifierName("found_"),
-                               SyntaxFactory.Block(SyntaxFactory.IfStatement(SyntaxFactory.BinaryExpression(aggregationMethod.Contains(".Max") ? SyntaxKind.GreaterThanExpression : SyntaxKind.LessThanExpression, x, SyntaxFactory.IdentifierName(minmax)), SyntaxFactory.ExpressionStatement(assignmentExpressionSyntax))),
+                               SyntaxFactory.Block(SyntaxFactory.IfStatement(condition, SyntaxFactory.ExpressionStatement(assignmentExpressionSyntax))),
                                SyntaxFactory.ElseClause(SyntaxFactory.Block(SyntaxFactory.ExpressionStatement(SyntaxFactory.AssignmentExpression(SyntaxKind.SimpleAssignmentExpression, SyntaxFactory.IdentifierName("found_"), SyntaxFactory.LiteralExpression(SyntaxKind.TrueLiteralExpression))), SyntaxFactory.ExpressionStatement(assignmentExpressionSyntax))));
                         });
                     });
