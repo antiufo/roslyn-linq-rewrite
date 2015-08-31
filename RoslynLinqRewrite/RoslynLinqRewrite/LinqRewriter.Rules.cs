@@ -46,7 +46,7 @@ namespace RoslynLinqRewrite
                         var currentValue = SyntaxFactory.IdentifierName(param.Identifier.ValueText);
                         return IfNullableIsNotNull(elementType != returnType, currentValue, x =>
                         {
-                            return SyntaxFactory.ExpressionStatement(SyntaxFactory.AssignmentExpression(SyntaxKind.AddAssignmentExpression, SyntaxFactory.IdentifierName("sum_"), x));
+                            return SyntaxFactory.CheckedStatement(SyntaxKind.CheckedStatement, SyntaxFactory.Block(SyntaxFactory.ExpressionStatement(SyntaxFactory.AssignmentExpression(SyntaxKind.AddAssignmentExpression, SyntaxFactory.IdentifierName("sum_"), x))));
                         });
                     }
                 );
@@ -130,10 +130,10 @@ namespace RoslynLinqRewrite
                         var currentValue = SyntaxFactory.IdentifierName(param.Identifier.ValueText);
                         return IfNullableIsNotNull(elementType != returnType, currentValue, x =>
                         {
-                            return SyntaxFactory.Block(
+                            return SyntaxFactory.CheckedStatement(SyntaxKind.CheckedStatement, SyntaxFactory.Block(
                                 SyntaxFactory.ExpressionStatement(SyntaxFactory.PostfixUnaryExpression(SyntaxKind.PostIncrementExpression, SyntaxFactory.IdentifierName("count_"))),
                                 SyntaxFactory.ExpressionStatement(SyntaxFactory.AssignmentExpression(SyntaxKind.AddAssignmentExpression, SyntaxFactory.IdentifierName("sum_"), x))
-                            );
+                            ));
                         });
                     }
                 );
