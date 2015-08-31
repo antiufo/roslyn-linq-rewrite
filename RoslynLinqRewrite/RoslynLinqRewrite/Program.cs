@@ -157,6 +157,7 @@ var k = arr2.Where(x => x.StartsWith(""t"")).Select(x=>x==""miao"").LastOrDefaul
 
         private static void CompileProject(Project project, bool writeFiles, bool enable = true)
         {
+            project = project.WithParseOptions(((CSharpParseOptions)project.ParseOptions).WithPreprocessorSymbols(project.ParseOptions.PreprocessorSymbolNames.Concat(new[] { "LINQREWRITE" })));
             var compilation = project.GetCompilationAsync().Result;
 
             var hasErrs = false;
