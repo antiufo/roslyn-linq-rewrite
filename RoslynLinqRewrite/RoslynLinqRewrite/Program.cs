@@ -17,10 +17,11 @@ namespace RoslynLinqRewrite
         {
             try
             {
+                var norewrite = args.Contains("--norewrite");
                 var posargs = args.Where(x => !x.StartsWith("-")).ToList();
                 if (posargs.Count >= 1)
                 {
-                    CompileSolution(posargs.First(), posargs.ElementAtOrDefault(1), false);
+                    CompileSolution(posargs.First(), posargs.ElementAtOrDefault(1), false, !norewrite);
                 }
                 return 0;
             }
@@ -124,26 +125,26 @@ var k = arr2.Where(x => x.StartsWith(""t"")).Select(x=>x==""miao"").LastOrDefaul
             Console.ResetColor();
         }
 
-        private static void CompileSolution(string path, string projectName, bool writeFiles)
+        private static void CompileSolution(string path, string projectName, bool writeFiles, bool enable = true)
         {
             var workspace = MSBuildWorkspace.Create();
             Solution solution = null;
             if (".csproj".Equals(Path.GetExtension(path), StringComparison.OrdinalIgnoreCase))
             {
-                CompileProject(workspace.OpenProjectAsync(path).Result, writeFiles);
+                CompileProject(workspace.OpenProjectAsync(path).Result, writeFiles, enable);
             }
             else
             {
                 solution = workspace.OpenSolutionAsync(path).Result;
                 if (projectName != null)
                 {
-                    CompileProject(solution.Projects.Single(x => x.Name == projectName), writeFiles);
+                    CompileProject(solution.Projects.Single(x => x.Name == projectName), writeFiles, enable);
                 }
                 else
                 {
                     foreach (var project in solution.Projects)
                     {
-                        CompileProject(project, writeFiles);
+                        CompileProject(project, writeFiles, enable);
                     }
                 }
             }
@@ -152,12 +153,12 @@ var k = arr2.Where(x => x.StartsWith(""t"")).Select(x=>x==""miao"").LastOrDefaul
             
         }
 
-        private static void CompileProject(Project project, bool writeFiles)
+        private static void CompileProject(Project project, bool writeFiles, bool enable = true)
         {
-            var comp = project.GetCompilationAsync().Result;
+            var compilation = project.GetCompilationAsync().Result;
 
             var hasErrs = false;
-            foreach (var item in comp.GetDiagnostics())
+            foreach (var item in compilation.GetDiagnostics())
             {
                 PrintDiagnostic(item);
                 if (item.Severity == DiagnosticSeverity.Error) hasErrs = true;
@@ -165,45 +166,48 @@ var k = arr2.Where(x => x.StartsWith(""t"")).Select(x=>x==""miao"").LastOrDefaul
 
             if (hasErrs) Environment.Exit(1);
             var updatedProject = project;
-            foreach (var doc in project.Documents)
+            if (enable)
             {
-                Console.WriteLine(doc.FilePath);
-                var syntaxTree = doc.GetSyntaxTreeAsync().Result;
-
-                var rewriter = new LinqRewriter(project, comp.GetSemanticModel(syntaxTree), doc.Id);
-
-                var rewritten = rewriter.Visit(syntaxTree.GetRoot()).NormalizeWhitespace();
-                if (writeFiles)
+                foreach (var doc in project.Documents)
                 {
-                    var tostring = rewritten.ToFullString();
-                    if (syntaxTree.ToString() != tostring)
-                    {
-                        File.WriteAllText(doc.FilePath, tostring, Encoding.UTF8);
-                    }
-                }
-                updatedProject = updatedProject.GetDocument(doc.Id).WithSyntaxRoot(rewritten).Project;
+                    Console.WriteLine(doc.FilePath);
+                    var syntaxTree = doc.GetSyntaxTreeAsync().Result;
 
-            }
-            project = updatedProject;
-            var compilation = project.GetCompilationAsync().Result;
-            hasErrs = false;
-            foreach (var item in compilation.GetDiagnostics())
-            {
-                PrintDiagnostic(item);
-                if (item.Severity == DiagnosticSeverity.Error)
-                {
-                    hasErrs = true;
-                    if (item.Location != Location.None)
+                    var rewriter = new LinqRewriter(project, compilation.GetSemanticModel(syntaxTree), doc.Id);
+
+                    var rewritten = rewriter.Visit(syntaxTree.GetRoot()).NormalizeWhitespace();
+                    if (writeFiles)
                     {
-                        Console.ForegroundColor = ConsoleColor.White;
-                        //var lines = item.Location.GetLineSpan();
-                        var node = item.Location.SourceTree.GetRoot().FindNode(item.Location.SourceSpan);
-                        var k = node.AncestorsAndSelf().FirstOrDefault(x => x is MethodDeclarationSyntax);
-                        if (k != null)
+                        var tostring = rewritten.ToFullString();
+                        if (syntaxTree.ToString() != tostring)
                         {
-                            Console.WriteLine(k.ToString());
+                            File.WriteAllText(doc.FilePath, tostring, Encoding.UTF8);
                         }
-                        Console.ResetColor();
+                    }
+                    updatedProject = updatedProject.GetDocument(doc.Id).WithSyntaxRoot(rewritten).Project;
+
+                }
+                project = updatedProject;
+                compilation = project.GetCompilationAsync().Result;
+                hasErrs = false;
+                foreach (var item in compilation.GetDiagnostics())
+                {
+                    PrintDiagnostic(item);
+                    if (item.Severity == DiagnosticSeverity.Error)
+                    {
+                        hasErrs = true;
+                        if (item.Location != Location.None)
+                        {
+                            Console.ForegroundColor = ConsoleColor.White;
+                            //var lines = item.Location.GetLineSpan();
+                            var node = item.Location.SourceTree.GetRoot().FindNode(item.Location.SourceSpan);
+                            var k = node.AncestorsAndSelf().FirstOrDefault(x => x is MethodDeclarationSyntax);
+                            if (k != null)
+                            {
+                                Console.WriteLine(k.ToString());
+                            }
+                            Console.ResetColor();
+                        }
                     }
                 }
             }
