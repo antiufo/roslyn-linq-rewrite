@@ -127,7 +127,9 @@ var k = arr2.Where(x => x.StartsWith(""t"")).Select(x=>x==""miao"").LastOrDefaul
 
         private static void CompileSolution(string path, string projectName, bool writeFiles, bool enable = true)
         {
-            var workspace = MSBuildWorkspace.Create();
+            var properties = new Dictionary<string, string>();
+            properties.Add("Configuration", "Release");
+            var workspace = MSBuildWorkspace.Create(properties);
             Solution solution = null;
             if (".csproj".Equals(Path.GetExtension(path), StringComparison.OrdinalIgnoreCase))
             {
