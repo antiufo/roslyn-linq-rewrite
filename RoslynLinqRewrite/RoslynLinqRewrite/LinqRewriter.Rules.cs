@@ -530,8 +530,6 @@ namespace RoslynLinqRewrite
                             SyntaxFactory.IdentifierName("GetValueOrDefault")
                         )
                     );
-
-                var k = ((items as ICollection<int>)?.Count).GetValueOrDefault();
             }
             return null;
         }
