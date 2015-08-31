@@ -147,8 +147,6 @@ namespace RoslynLinqRewrite
 
                     if (IsAnonymousType(semantic.GetTypeInfo(collection).Type)) return null;
 
-                    var methodNames = Enumerable.Range(0, 5).Select(x => x < chain.Count ? chain[x].MethodName : null).ToList();
-
 
                     var semanticReturnType = semantic.GetTypeInfo(node).Type;
                     if (IsAnonymousType(semanticReturnType) || currentFlow.Any(x => IsAnonymousType(GetSymbolType(x.Symbol)))) return null;
@@ -157,8 +155,11 @@ namespace RoslynLinqRewrite
 
 
 
-                    var aggregationMethod = methodNames[0];
-                    return TryRewrite(aggregationMethod, collection, semanticReturnType, chain, node);
+                    
+                    return TryRewrite(chain.First().MethodName, collection, semanticReturnType, chain, node)
+                        .WithLeadingTrivia(((CSharpSyntaxNode)containingForEach ?? node).GetLeadingTrivia())
+                        .WithTrailingTrivia(((CSharpSyntaxNode)containingForEach ?? node).GetTrailingTrivia());
+
                 }
             }
             return null;
@@ -182,6 +183,20 @@ namespace RoslynLinqRewrite
             return SyntaxFactory.ExpressionStatement(expression);
         }
 
+        public override SyntaxNode VisitMethodDeclaration(MethodDeclarationSyntax node)
+        {
+            if (HasNoRewriteAttribute(node.AttributeLists)) return node;
+            return base.VisitMethodDeclaration(node);
+        }
+
+        private bool HasNoRewriteAttribute(SyntaxList<AttributeListSyntax> attributeLists)
+        {
+            return attributeLists.Any(x => x.Attributes.Any(y =>
+            {
+                var symbol = ((IMethodSymbol)semantic.GetSymbolInfo(y).Symbol).ContainingType;
+                return symbol.ToDisplayString() == "Shaman.Runtime.NoLinqRewriteAttribute";
+            }));
+        }
 
         private bool IsAnonymousType(ITypeSymbol t)
         {
@@ -367,6 +382,8 @@ namespace RoslynLinqRewrite
 
         private SyntaxNode VisitTypeDeclaration(TypeDeclarationSyntax node)
         {
+            if (HasNoRewriteAttribute(node.AttributeLists)) return node;
+
             var old = currentType;
             currentType = node;
             var changed = (TypeDeclarationSyntax)(node is ClassDeclarationSyntax ? base.VisitClassDeclaration((ClassDeclarationSyntax)node) : base.VisitStructDeclaration((StructDeclarationSyntax)node));
