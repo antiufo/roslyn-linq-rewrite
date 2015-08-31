@@ -70,7 +70,7 @@ namespace RoslynLinqRewrite
                 currentMethodTypeParameters = ((MethodDeclarationSyntax)owner).TypeParameterList;
                 currentMethodConstraintClauses = ((MethodDeclarationSyntax)owner).ConstraintClauses;
 
-                
+
                 if (IsSupportedMethod(GetMethodFullName(node)))
                 {
                     var chain = new List<LinqStep>();
@@ -155,7 +155,7 @@ namespace RoslynLinqRewrite
 
 
 
-                    
+
                     return TryRewrite(chain.First().MethodName, collection, semanticReturnType, chain, node)
                         .WithLeadingTrivia(((CSharpSyntaxNode)containingForEach ?? node).GetLeadingTrivia())
                         .WithTrailingTrivia(((CSharpSyntaxNode)containingForEach ?? node).GetTrailingTrivia());
@@ -203,9 +203,9 @@ namespace RoslynLinqRewrite
             return (t.ToDisplayString().Contains("anonymous type:"));
         }
 
-        private ThrowStatementSyntax CreateThrowException(string type, string message)
+        private ThrowStatementSyntax CreateThrowException(string type, string message = null)
         {
-            return SyntaxFactory.ThrowStatement(SyntaxFactory.ObjectCreationExpression(SyntaxFactory.ParseTypeName(type), CreateArguments(new[] { SyntaxFactory.LiteralExpression(SyntaxKind.StringLiteralExpression, SyntaxFactory.Literal(message)) }), null));
+            return SyntaxFactory.ThrowStatement(SyntaxFactory.ObjectCreationExpression(SyntaxFactory.ParseTypeName(type), CreateArguments(message!=null? new[] { SyntaxFactory.LiteralExpression(SyntaxKind.StringLiteralExpression, SyntaxFactory.Literal(message)) } :  new ExpressionSyntax[] { }), null));
         }
 
         private static ParameterSyntax GetLambdaParameter(Lambda lambda, int index)
@@ -331,7 +331,9 @@ namespace RoslynLinqRewrite
 
             var coreFunction = SyntaxFactory.MethodDeclaration(returnType, functionName)
                         .WithParameterList(CreateParameters(parameters))
-                        .WithBody(SyntaxFactory.Block(prologue.Concat(new[] {
+                        .WithBody(SyntaxFactory.Block(new[] {
+                            SyntaxFactory.IfStatement(SyntaxFactory.BinaryExpression(SyntaxKind.EqualsExpression, SyntaxFactory.IdentifierName(ItemsName) ,SyntaxFactory.LiteralExpression(SyntaxKind.NullLiteralExpression)), CreateThrowException("System.ArgumentNullException"))
+                        }.Concat(prologue).Concat(new[] {
                             foreachStatement
                         }).Concat(epilogue)))
                         .WithStatic(currentMethodIsStatic)
