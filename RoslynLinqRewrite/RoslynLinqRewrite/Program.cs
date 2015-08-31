@@ -213,7 +213,8 @@ var k = arr2.Where(x => x.StartsWith(""t"")).Select(x=>x==""miao"").LastOrDefaul
                     }
                 }
             }
-            compilation.Emit(@"C:\temp\roslynrewrite\" + project.AssemblyName + ".dll");
+            compilation.Emit(project.OutputFilePath);
+            //compilation.Emit(@"C:\temp\roslynrewrite\" + project.AssemblyName + ".dll");
             if (hasErrs) Environment.Exit(1);
         }
     }
