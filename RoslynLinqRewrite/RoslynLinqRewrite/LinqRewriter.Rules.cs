@@ -506,6 +506,7 @@ namespace RoslynLinqRewrite
             if (allowUnknown)
             {
                 var items = new int[] { };
+                if (collectionType.IsValueType) return null;
                 var itemType = GetItemType(collectionType);
                 if (itemType == null) return null;
                 return
