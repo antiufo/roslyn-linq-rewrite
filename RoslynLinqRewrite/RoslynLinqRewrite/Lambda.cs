@@ -25,7 +25,7 @@ namespace RoslynLinqRewrite
             if (lambda is SimpleLambdaExpressionSyntax) Parameters = new[] { ((SimpleLambdaExpressionSyntax)lambda).Parameter };
         }
 
-        public Lambda(StatementSyntax statement, ParameterSyntax[] parameters)
+        public Lambda(CSharpSyntaxNode statement, ParameterSyntax[] parameters)
         {
             Body = statement;
             Parameters = parameters;
