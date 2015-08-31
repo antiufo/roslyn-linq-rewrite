@@ -296,12 +296,16 @@ namespace RoslynLinqRewrite
         {
             var old = currentAggregation;
             currentAggregation = k;
-            var parameters = new[] { CreateParameter(ItemsName, semantic.GetTypeInfo(collection).Type) }.Concat(currentFlow.Select(x => CreateParameter(x.Name, GetSymbolType(x.Symbol)).WithRef(x.Changes)));
-            if (additionalParameters != null) parameters = parameters.Concat(additionalParameters.Select(x => x.Item1));
 
             var collectionType = semantic.GetTypeInfo(collection).Type;
             var collectionItemType = GetItemType(collectionType);
             if (collectionItemType == null) throw new NotSupportedException();
+            var collectionSemanticType = semantic.GetTypeInfo(collection).Type;
+
+            var parameters =  new[] { CreateParameter(ItemsName, collectionSemanticType) }.Concat(currentFlow.Select(x => CreateParameter(x.Name, GetSymbolType(x.Symbol)).WithRef(x.Changes)));
+            if (additionalParameters != null) parameters = parameters.Concat(additionalParameters.Select(x => x.Item1));
+
+            
 
             var functionName = GetUniqueName(currentMethodName + "_ProceduralLinq");
             var arguments = CreateArguments(new[] { SyntaxFactory.Argument(SyntaxFactory.IdentifierName(ItemName)) }.Concat(currentFlow.Select(x => SyntaxFactory.Argument(SyntaxFactory.IdentifierName(x.Name)).WithRef(x.Changes))));
@@ -331,9 +335,9 @@ namespace RoslynLinqRewrite
 
             var coreFunction = SyntaxFactory.MethodDeclaration(returnType, functionName)
                         .WithParameterList(CreateParameters(parameters))
-                        .WithBody(SyntaxFactory.Block(new[] {
+                        .WithBody(SyntaxFactory.Block((collectionSemanticType.IsValueType ? Enumerable.Empty<StatementSyntax>() : new[] {
                             SyntaxFactory.IfStatement(SyntaxFactory.BinaryExpression(SyntaxKind.EqualsExpression, SyntaxFactory.IdentifierName(ItemsName) ,SyntaxFactory.LiteralExpression(SyntaxKind.NullLiteralExpression)), CreateThrowException("System.ArgumentNullException"))
-                        }.Concat(prologue).Concat(new[] {
+                        }).Concat(prologue).Concat(new[] {
                             foreachStatement
                         }).Concat(epilogue)))
                         .WithStatic(currentMethodIsStatic)
