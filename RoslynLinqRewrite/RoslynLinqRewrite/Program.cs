@@ -23,6 +23,9 @@ namespace RoslynLinqRewrite
         {
             try
             {
+                // how do dnu commands installs really work?
+                if (args.FirstOrDefault() == "RoslynLinqRewrite") args = args.Skip(1).ToArray();
+
                 NoRewrite = args.Contains("--norewrite");
                 ForProjBuild = args.Contains("--projbuild");
                 var posargs = args.Where(x => !x.StartsWith("-")).ToList();
