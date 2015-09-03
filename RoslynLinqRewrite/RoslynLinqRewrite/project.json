@@ -1,5 +1,5 @@
 {
-  "version": "1.0.0-beta-3275",
+  "version": "1.0.0-beta-3280",
   "authors": [
     "Andrea Martinelli"
   ],
@@ -8,7 +8,7 @@
     "RoslynLinqRewrite": "RoslynLinqRewrite"
   },
   "frameworks": {
-    "dnx46": {
+    "dnx45": {
       "dependencies": {
         "Microsoft.CodeAnalysis.Analyzers": "1.0.0",
         "Microsoft.CodeAnalysis.Common": "1.0.0",
