@@ -1,0 +1,38 @@
+{
+  "version": "1.0.0-beta-3275",
+  "authors": [
+    "Andrea Martinelli"
+  ],
+  "description": "Compiles a project by rewriting LINQ expressions into fast, procedural code with minimal allocations.",
+  "commands": {
+    "RoslynLinqRewrite": "RoslynLinqRewrite"
+  },
+  "frameworks": {
+    "dnx46": {
+      "dependencies": {
+        "Microsoft.CodeAnalysis.Analyzers": "1.0.0",
+        "Microsoft.CodeAnalysis.Common": "1.0.0",
+        "Microsoft.CodeAnalysis.CSharp": "1.0.0",
+        "Microsoft.CodeAnalysis.CSharp.Workspaces": "1.0.0",
+        "Microsoft.CodeAnalysis.Workspaces.Common": "1.0.0",
+        "Microsoft.Composition": "1.0.27",
+        "System.Collections.Immutable": "1.1.36",
+        "System.Reflection.Metadata": "1.0.21",
+        "xunit": "2.1.0-beta4-build3109",
+        "xunit.abstractions": "2.0.0",
+        "xunit.assert": "2.1.0-beta4-build3109",
+        "xunit.core": "2.1.0-beta4-build3109",
+        "xunit.extensibility.core": "2.1.0-beta4-build3109",
+        "xunit.runner.console": "2.1.0-beta4-build3109"
+      },
+      "frameworkAssemblies": {
+        "System.Runtime": "4.0.0.0",
+        "System.Xml": "4.0.0.0",
+        "System.Linq": "4.0.0.0",
+        "System.Threading.Tasks": "4.0.0.0",
+        "System.IO": "4.0.0.0",
+        "System.Xml.Linq": "4.0.0.0"
+      }
+    }
+  }
+}
