@@ -2,6 +2,7 @@
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.MSBuild;
+using Shaman.Runtime;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -238,7 +239,16 @@ var k = arr2.Where(x => x.StartsWith(""t"")).Select(x=>x==""miao"").LastOrDefaul
                 {
                     File.Delete(resource);
                 }
-                Shaman.Runtime.ProcessUtils.RunPassThrough("msbuild", project.FilePath, new Shaman.Runtime.ProcessUtils.RawCommandLineArgument("/p:Configuration=Release"));
+                
+                var args =new object[] { project.FilePath, new Shaman.Runtime.ProcessUtils.RawCommandLineArgument("/p:Configuration=Release") };
+                try
+                {
+                    ProcessUtils.RunPassThrough("msbuild", args);
+                }
+                catch (Exception ex) when(!(ex is ProcessException))
+                {
+                    ProcessUtils.RunPassThrough("xbuild", args);
+                }
             }
             var resources = hasResources ? Directory.EnumerateFiles(Path.GetDirectoryName(objpath), "*.resources")
                 .Select(x =>
