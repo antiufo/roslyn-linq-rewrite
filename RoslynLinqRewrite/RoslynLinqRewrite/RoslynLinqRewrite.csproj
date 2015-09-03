@@ -97,6 +97,7 @@
     <Compile Include="LinqRewriter.cs" />
     <Compile Include="LinqRewriter.Rules.cs" />
     <Compile Include="LinqStep.cs" />
+    <Compile Include="ProcessUtils.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
