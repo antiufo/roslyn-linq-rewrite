@@ -11,7 +11,7 @@
     "net45": {
       "dependencies": {
 
-        "Microsoft.CodeAnalysis.CSharp.Workspaces": "1.0.0",
+        "Microsoft.CodeAnalysis.CSharp.Workspaces": "1.1.0-beta1-20150812-01",
         "Shaman.DotNetFacades.DotNet45": "1.0.0",
         "Shaman.DotNet.System.Xml.Linq": "1.0.0",
         "Shaman.DotNet.System.Xml": "1.0.0",
