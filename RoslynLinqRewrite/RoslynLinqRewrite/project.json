@@ -18,12 +18,7 @@
         "Microsoft.Composition": "1.0.27",
         "System.Collections.Immutable": "1.1.36",
         "System.Reflection.Metadata": "1.0.21",
-        "xunit": "2.1.0-beta4-build3109",
-        "xunit.abstractions": "2.0.0",
-        "xunit.assert": "2.1.0-beta4-build3109",
-        "xunit.core": "2.1.0-beta4-build3109",
-        "xunit.extensibility.core": "2.1.0-beta4-build3109",
-        "xunit.runner.console": "2.1.0-beta4-build3109"
+
       },
       "frameworkAssemblies": {
         "System.Runtime": "4.0.0.0",
