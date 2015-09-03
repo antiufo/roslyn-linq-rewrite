@@ -8,20 +8,27 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using System.Xml.Linq;
 
 namespace RoslynLinqRewrite
 {
     class Program
     {
+        private static bool NoRewrite;
+        private static bool ForProjBuild;
+        private static bool WriteFiles;
+        
         static int Main(string[] args)
         {
             try
             {
-                var norewrite = args.Contains("--norewrite");
+                NoRewrite = args.Contains("--norewrite");
+                ForProjBuild = args.Contains("--projbuild");
                 var posargs = args.Where(x => !x.StartsWith("-")).ToList();
                 if (posargs.Count >= 1)
                 {
-                    CompileSolution(posargs.First(), posargs.ElementAtOrDefault(1), false, !norewrite);
+                    WriteFiles = false;
+                    CompileSolution(posargs.First(), posargs.ElementAtOrDefault(1));
                 }
                 return 0;
             }
@@ -31,7 +38,7 @@ namespace RoslynLinqRewrite
                 Console.WriteLine(ex.StackTrace);
                 return 1;
             }
-            
+
 
 
             if (!args.Contains("--VisualStudio"))
@@ -43,7 +50,7 @@ namespace RoslynLinqRewrite
             {
                 //CompileSolution(@"D:\Repositories\shaman-fizzler\Fizzler.sln", "Fizzler", false);
                 //CompileSolution(@"C:\Repositories\Awdee\Shaman.ApiServer.sln", "Shaman.Core", true);
-                CompileSolution(@"C:\Repositories\Awdee\Shaman.ApiServer.sln", "Shaman.Inferring.FullLogic", true);
+                CompileSolution(@"C:\Repositories\Awdee\Shaman.ApiServer.sln", "Shaman.Inferring.FullLogic");
                 return 0;
             }
 
@@ -125,7 +132,7 @@ var k = arr2.Where(x => x.StartsWith(""t"")).Select(x=>x==""miao"").LastOrDefaul
             Console.ResetColor();
         }
 
-        private static void CompileSolution(string path, string projectName, bool writeFiles, bool enable = true)
+        private static void CompileSolution(string path, string projectName)
         {
             var properties = new Dictionary<string, string>();
             properties.Add("Configuration", "Release");
@@ -133,29 +140,29 @@ var k = arr2.Where(x => x.StartsWith(""t"")).Select(x=>x==""miao"").LastOrDefaul
             Solution solution = null;
             if (".csproj".Equals(Path.GetExtension(path), StringComparison.OrdinalIgnoreCase))
             {
-                CompileProject(workspace.OpenProjectAsync(path).Result, writeFiles, enable);
+                CompileProject(workspace.OpenProjectAsync(path).Result);
             }
             else
             {
                 solution = workspace.OpenSolutionAsync(path).Result;
                 if (projectName != null)
                 {
-                    CompileProject(solution.Projects.Single(x => x.Name == projectName), writeFiles, enable);
+                    CompileProject(solution.Projects.Single(x => x.Name == projectName));
                 }
                 else
                 {
                     foreach (var project in solution.Projects)
                     {
-                        CompileProject(project, writeFiles, enable);
+                        CompileProject(project);
                     }
                 }
             }
 
-            
-            
+
+
         }
 
-        private static void CompileProject(Project project, bool writeFiles, bool enable = true)
+        private static void CompileProject(Project project)
         {
             project = project.WithParseOptions(((CSharpParseOptions)project.ParseOptions).WithPreprocessorSymbols(project.ParseOptions.PreprocessorSymbolNames.Concat(new[] { "LINQREWRITE" })));
             var compilation = project.GetCompilationAsync().Result;
@@ -169,7 +176,7 @@ var k = arr2.Where(x => x.StartsWith(""t"")).Select(x=>x==""miao"").LastOrDefaul
 
             if (hasErrs) Environment.Exit(1);
             var updatedProject = project;
-            if (enable)
+            if (!NoRewrite)
             {
                 foreach (var doc in project.Documents)
                 {
@@ -179,7 +186,7 @@ var k = arr2.Where(x => x.StartsWith(""t"")).Select(x=>x==""miao"").LastOrDefaul
                     var rewriter = new LinqRewriter(project, compilation.GetSemanticModel(syntaxTree), doc.Id);
 
                     var rewritten = rewriter.Visit(syntaxTree.GetRoot()).NormalizeWhitespace();
-                    if (writeFiles)
+                    if (WriteFiles)
                     {
                         var tostring = rewritten.ToFullString();
                         if (syntaxTree.ToString() != tostring)
@@ -214,7 +221,46 @@ var k = arr2.Where(x => x.StartsWith(""t"")).Select(x=>x==""miao"").LastOrDefaul
                     }
                 }
             }
-            compilation.Emit(project.OutputFilePath);
+            string outputPath = project.OutputFilePath.Replace("\\", "/");
+            var objpath = outputPath.Replace("/bin/", "/obj/");
+            if (ForProjBuild) outputPath = objpath;
+
+            var ns = XNamespace.Get("http://schemas.microsoft.com/developer/msbuild/2003");
+            var xml = XDocument.Load(project.FilePath);
+            var hasResources = xml
+                .DescendantNodes()
+                .OfType<XElement>()
+                .Where(x => x.Name == ns + "EmbeddedResource" || x.Name == ns + "Resource")
+                .Any();
+            if (hasResources)
+            {
+                foreach (var resource in Directory.GetFiles(Path.GetDirectoryName(objpath), "*.resources"))
+                {
+                    File.Delete(resource);
+                }
+                Shaman.Runtime.ProcessUtils.RunPassThrough("msbuild", project.FilePath, new Shaman.Runtime.ProcessUtils.RawCommandLineArgument("/p:Configuration=Release"));
+            }
+            var resources = hasResources ? Directory.EnumerateFiles(Path.GetDirectoryName(objpath), "*.resources")
+                .Select(x =>
+                {
+                    return new ResourceDescription(Path.GetFileName(x), () => File.OpenRead(x), true);
+                }).ToList() : Enumerable.Empty<ResourceDescription>();
+            /*
+            var resources = XDocument.Load(project.FilePath)
+                .DescendantNodes()
+                .OfType<XElement>().Where(x => x.Name == ns + "EmbeddedResource")
+                .Select(x => x.Attribute(ns + "Include"))
+                .Select(x => Path.Combine(Path.GetDirectoryName(project.FilePath), x.Value))
+                .Select(x =>
+                {
+                    var rd = new ResourceDescription();
+                }).ToList();
+            */
+
+            compilation.Emit(outputPath, manifestResources: resources);
+
+
+
             //compilation.Emit(@"C:\temp\roslynrewrite\" + project.AssemblyName + ".dll");
             if (hasErrs) Environment.Exit(1);
         }
