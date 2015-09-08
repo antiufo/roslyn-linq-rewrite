@@ -1,7 +1,6 @@
 ﻿using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
-using Microsoft.CodeAnalysis.MSBuild;
 using Shaman.Runtime;
 using System;
 using System.Collections.Generic;
@@ -10,6 +9,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using System.Xml.Linq;
+using System.Reflection;
 
 namespace RoslynLinqRewrite
 {
@@ -35,6 +35,10 @@ namespace RoslynLinqRewrite
                     CompileSolution(posargs.First(), posargs.ElementAtOrDefault(1));
                 }
                 return 0;
+            }
+            catch (ExitException ex)
+            {
+                return ex.Code;
             }
             catch (Exception ex)
             {
@@ -92,13 +96,13 @@ var k = arr2.Where(x => x.StartsWith(""t"")).Select(x=>x==""miao"").LastOrDefaul
             //var syntaxTree = Microsoft.CodeAnalysis.CSharp.CSharpSyntaxTree.ParseText(code);
 
 
-
+#if !CORECLR
 
             var workspace = new AdhocWorkspace();
             var proj = workspace.AddProject("LinqRewriteExample", "C#").WithMetadataReferences(
                 new[] {
-                MetadataReference.CreateFromFile(typeof(int).Assembly.Location),
-                MetadataReference.CreateFromFile(typeof(System.Linq.Enumerable).Assembly.Location),
+                MetadataReference.CreateFromFile(typeof(int).GetTypeInfo().Assembly.Location),
+                MetadataReference.CreateFromFile(typeof(System.Linq.Enumerable).GetTypeInfo().Assembly.Location),
                 }
                 ).WithCompilationOptions(new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
             var doc = proj.AddDocument("source.cs", code);
@@ -125,6 +129,7 @@ var k = arr2.Where(x => x.StartsWith(""t"")).Select(x=>x==""miao"").LastOrDefaul
             {
                 PrintDiagnostic(item);
             }
+#endif
         }
 
         private static void PrintDiagnostic(Diagnostic item)
@@ -140,7 +145,11 @@ var k = arr2.Where(x => x.StartsWith(""t"")).Select(x=>x==""miao"").LastOrDefaul
         {
             var properties = new Dictionary<string, string>();
             properties.Add("Configuration", "Release");
-            var workspace = MSBuildWorkspace.Create(properties);
+#if CORECLR
+            throw new NotSupportedException("Compiling CSPROJ files is not supported on CORECLR");
+#else
+            var workspace = Microsoft.CodeAnalysis.MSBuild.MSBuildWorkspace.Create(properties);
+
             Solution solution = null;
             if (".csproj".Equals(Path.GetExtension(path), StringComparison.OrdinalIgnoreCase))
             {
@@ -162,7 +171,7 @@ var k = arr2.Where(x => x.StartsWith(""t"")).Select(x=>x==""miao"").LastOrDefaul
                 }
             }
 
-
+#endif
 
         }
 
@@ -178,7 +187,7 @@ var k = arr2.Where(x => x.StartsWith(""t"")).Select(x=>x==""miao"").LastOrDefaul
                 if (item.Severity == DiagnosticSeverity.Error) hasErrs = true;
             }
 
-            if (hasErrs) Environment.Exit(1);
+            if (hasErrs) throw new ExitException(1);
             var updatedProject = project;
             if (!NoRewrite)
             {
@@ -275,7 +284,7 @@ var k = arr2.Where(x => x.StartsWith(""t"")).Select(x=>x==""miao"").LastOrDefaul
 
 
             //compilation.Emit(@"C:\temp\roslynrewrite\" + project.AssemblyName + ".dll");
-            if (hasErrs) Environment.Exit(1);
+            if (hasErrs) throw new ExitException(1);
         }
     }
 }
