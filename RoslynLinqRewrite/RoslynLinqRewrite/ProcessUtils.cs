@@ -10,6 +10,8 @@ namespace Shaman.Runtime
 {
     public static class ProcessUtils
     {
+        private static string DefaultWorkingDir = Environment.GetEnvironmentVariable("SystemRoot") ?? "/";
+
         public static ProcessStartInfo CreateProcessStartInfo(string workingDirectory, string command, params object[] args)
         {
             var psi = new ProcessStartInfo();
@@ -91,12 +93,12 @@ namespace Shaman.Runtime
 
         public static string Run(string command, params object[] args)
         {
-            return RunFrom(Environment.SystemDirectory, command, args);
+            return RunFrom(DefaultWorkingDir, command, args);
         }
 
         public static void RunPassThrough(string command, params object[] args)
         {
-            RunPassThroughFrom(Environment.SystemDirectory, command, args);
+            RunPassThroughFrom(DefaultWorkingDir, command, args);
         }
 
         public static CommandLineNamedArgument NamedArgument(string name, object value)

@@ -28,7 +28,7 @@ namespace RoslynLinqRewrite
         static LinqRewriter()
         {
 
-            KnownMethods = typeof(LinqRewriter).GetFields(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static)
+            KnownMethods = typeof(LinqRewriter).GetTypeInfo().DeclaredFields
                 .Where(x => x.Name.EndsWith("Method") && x.FieldType == typeof(string))
                 .Select(x => (string)x.GetValue(null))
                 .ToList();
