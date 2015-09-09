@@ -18,9 +18,9 @@ namespace Microsoft.Dnx.Tooling
         private readonly string _targetFrameworkFolder;
         private readonly string _outputPath;
         private readonly LibraryManager _libraryManager;
-        private readonly LibraryExporter _libraryExporter;
+        private readonly LibraryExporter2 _libraryExporter;
 
-        public BuildContext(CompilationEngine compilationEngine,
+        public BuildContext(CompilationEngine2 compilationEngine,
                             Runtime.Project project,
                             FrameworkName targetFramework,
                             string configuration,
