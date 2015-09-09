@@ -12,13 +12,13 @@ using NuGet;
 
 namespace Microsoft.Dnx.Compilation
 {
-    public class LibraryExporter : ILibraryExporter
+    public class LibraryExporter2 : ILibraryExporter
     {
-        private readonly CompilationEngine _compilationEngine;
+        private readonly CompilationEngine2 _compilationEngine;
         private readonly string _configuration;
         private readonly IAssemblyLoadContext _loadContext;
 
-        public LibraryExporter(LibraryManager manager, IAssemblyLoadContext loadContext, CompilationEngine compilationEngine, string configuration)
+        public LibraryExporter2(LibraryManager manager, IAssemblyLoadContext loadContext, CompilationEngine2 compilationEngine, string configuration)
         {
             LibraryManager = manager;
             _compilationEngine = compilationEngine;
@@ -87,7 +87,7 @@ namespace Microsoft.Dnx.Compilation
             Func<LibraryDescription, bool> include)
         {
             var dependencyStopWatch = Stopwatch.StartNew();
-            Logger.TraceInformation($"[{nameof(LibraryExporter)}]: Resolving references for '{project.Identity.Name}' {aspect}");
+            Logger.TraceInformation($"[{nameof(LibraryExporter2)}]: Resolving references for '{project.Identity.Name}' {aspect}");
 
             var references = new Dictionary<string, IMetadataReference>(StringComparer.OrdinalIgnoreCase);
             var sourceReferences = new Dictionary<string, ISourceReference>(StringComparer.OrdinalIgnoreCase);
@@ -155,7 +155,7 @@ namespace Microsoft.Dnx.Compilation
             }
 
             dependencyStopWatch.Stop();
-            Logger.TraceInformation($"[{nameof(LibraryExporter)}]: Resolved {references.Count} references for '{project.Identity.Name}' in {dependencyStopWatch.ElapsedMilliseconds}ms");
+            Logger.TraceInformation($"[{nameof(LibraryExporter2)}]: Resolved {references.Count} references for '{project.Identity.Name}' in {dependencyStopWatch.ElapsedMilliseconds}ms");
 
             return new LibraryExport(
                 references.Values.ToList(),
@@ -220,9 +220,9 @@ namespace Microsoft.Dnx.Compilation
             return new LibraryExport(references.Values.ToList(), sourceReferences);
         }
 
-        private LibraryExport ExportProject(ProjectDescription project, string aspect, LibraryExporter exporter)
+        private LibraryExport ExportProject(ProjectDescription project, string aspect, LibraryExporter2 exporter)
         {
-            Logger.TraceInformation($"[{nameof(LibraryExporter)}]: {nameof(ExportProject)}({project.Identity.Name}, {aspect}, {project.Framework}, {_configuration})");
+            Logger.TraceInformation($"[{nameof(LibraryExporter2)}]: {nameof(ExportProject)}({project.Identity.Name}, {aspect}, {project.Framework}, {_configuration})");
 
             var key = Tuple.Create(project.Identity.Name, project.Framework, _configuration, aspect);
 
@@ -257,7 +257,7 @@ namespace Microsoft.Dnx.Compilation
                     // Find the project compiler
                     var projectCompiler = _compilationEngine.GetCompiler(compilerTypeInfo, exporter._loadContext);
 
-                    Logger.TraceInformation($"[{nameof(LibraryExporter)}]: GetProjectReference({compilerTypeInfo.TypeName}, {project.Identity.Name}, {project.Framework}, {aspect})");
+                    Logger.TraceInformation($"[{nameof(LibraryExporter2)}]: GetProjectReference({compilerTypeInfo.TypeName}, {project.Identity.Name}, {project.Framework}, {aspect})");
 
                     // Resolve the project export
                     IMetadataProjectReference projectReference = projectCompiler.CompileProject(
@@ -296,7 +296,7 @@ namespace Microsoft.Dnx.Compilation
         {
             if (string.IsNullOrEmpty(library.Path))
             {
-                Logger.TraceError($"[{nameof(LibraryExporter)}] Failed to export: {library.Identity.Name}");
+                Logger.TraceError($"[{nameof(LibraryExporter2)}] Failed to export: {library.Identity.Name}");
                 return null;
             }
 
