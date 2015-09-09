@@ -26,7 +26,7 @@ namespace Microsoft.Dnx.Tooling
         private readonly BuildOptions _buildOptions;
 
         // Shared by all projects that will be built by this class
-        private CompilationEngine _compilationEngine;
+        private CompilationEngine2 _compilationEngine;
 
         private Runtime.Project _currentProject;
 
@@ -39,11 +39,11 @@ namespace Microsoft.Dnx.Tooling
             var runtimeEnvironment = (IRuntimeEnvironment)hostServices.GetService(typeof(IRuntimeEnvironment));
             var loadContextAccessor = (IAssemblyLoadContextAccessor)hostServices.GetService(typeof(IAssemblyLoadContextAccessor));
 
-            _compilationEngine = new CompilationEngine(new CompilationEngineContext(
+            _compilationEngine = new CompilationEngine2(new CompilationEngineContext2(
                 _applicationEnvironment,
                 runtimeEnvironment,
                 loadContextAccessor.Default,
-                new CompilationCache()));
+                new CompilationCache2()));
 
             ScriptExecutor = new ScriptExecutor(buildOptions.Reports.Information);
         }
