@@ -1,23 +1,30 @@
-﻿using System.Runtime.Versioning;
-using Microsoft.Dnx.Runtime;
+﻿// Copyright (c) .NET Foundation. All rights reserved.
+// Licensed under the Apache License, Version 2.0. See License.txt in the project root for license information.
 
-namespace Microsoft.Dnx.Compilation
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Runtime.Versioning;
+using Microsoft.Dnx.Runtime;
+using NuGet;
+
+namespace Microsoft.Dnx.Tooling
 {
-    internal static class ProjectExtensions
+    public static class ProjectExtensions
     {
-        public static CompilationProjectContext ToCompilationContext(this Project self, FrameworkName frameworkName, string configuration, string aspect)
+        public static TargetFrameworkInformation GetCompatibleTargetFramework(this Runtime.Project project, FrameworkName targetFramework)
         {
-            return new CompilationProjectContext(
-                new CompilationTarget(self.Name, frameworkName, configuration, aspect),
-                self.ProjectDirectory,
-                self.ProjectFilePath,
-                self.Version.ToString(),
-                self.AssemblyFileVersion,
-                self.EmbedInteropTypes,
-                new CompilationFiles(
-                    self.Files.PreprocessSourceFiles,
-                    self.Files.SourceFiles),
-                self.GetCompilerOptions(frameworkName, configuration));
+            IEnumerable<TargetFrameworkInformation> targets;
+            if (VersionUtility.GetNearest(targetFramework, project.GetTargetFrameworks(), out targets) &&
+                targets.Any())
+            {
+                return targets.FirstOrDefault();
+            }
+
+            return new TargetFrameworkInformation
+            {
+                Dependencies = new List<LibraryDependency>()
+            };
         }
     }
 }
