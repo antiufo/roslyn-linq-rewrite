@@ -5,13 +5,13 @@ using System.Threading.Tasks;
 
 namespace Microsoft.Dnx.Compilation.Caching
 {
-    public class CompilationCache
+    public class CompilationCache2
     {
         public ICache Cache { get; }
         public ICacheContextAccessor CacheContextAccessor { get; }
         public INamedCacheDependencyProvider NamedCacheDependencyProvider { get; }
 
-        public CompilationCache()
+        public CompilationCache2()
         {
             CacheContextAccessor = new CacheContextAccessor();
             Cache = new Cache(CacheContextAccessor);

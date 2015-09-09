@@ -11,18 +11,18 @@ using Microsoft.Dnx.Runtime.Loader;
 
 namespace Microsoft.Dnx.Compilation
 {
-    public class CompilationEngine : ICompilationEngine
+    public class CompilationEngine2 : ICompilationEngine
     {
-        private readonly CompilationEngineContext _context;
+        private readonly CompilationEngineContext2 _context;
 
-        public CompilationEngine(CompilationEngineContext context)
+        public CompilationEngine2(CompilationEngineContext2 context)
         {
             _context = context;
 
             CompilationCache = _context.CompilationCache;
         }
 
-        public CompilationCache CompilationCache { get; }
+        public CompilationCache2 CompilationCache { get; }
 
         public Assembly LoadProject(Project project, FrameworkName targetFramework, string aspect, IAssemblyLoadContext loadContext, AssemblyName assemblyName)
         {
@@ -48,7 +48,7 @@ namespace Microsoft.Dnx.Compilation
             return null;
         }
 
-        public LibraryExporter CreateProjectExporter(Project project, FrameworkName targetFramework, string configuration)
+        public LibraryExporter2 CreateProjectExporter(Project project, FrameworkName targetFramework, string configuration)
         {
             // This library manager represents the graph that will be used to resolve
             // references (compiler /r in csc terms)
@@ -68,7 +68,7 @@ namespace Microsoft.Dnx.Compilation
             // build time related dependencies
             var loadContext = new RuntimeLoadContext(libraries, this, _context.DefaultLoadContext);
 
-            return new LibraryExporter(libraryManager, loadContext, this, configuration);
+            return new LibraryExporter2(libraryManager, loadContext, this, configuration);
         }
 
         public IProjectCompiler GetCompiler(TypeInformation provider, IAssemblyLoadContext loadContext)
