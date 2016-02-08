@@ -7,13 +7,13 @@
   "commands": {
     "RoslynLinqRewrite": "RoslynLinqRewrite"
   },
+  "exclude": [
+    "Dnx/*.cs"
+  ],
 
   "dependencies": {
     "Microsoft.CodeAnalysis.CSharp.Workspaces": "1.1.0-beta1-20150812-01",
-    "Microsoft.Dnx.Tooling": "1.0.0-beta8-15586",
-    "Microsoft.Framework.FileSystemGlobbing": "1.0.0-beta8-15550",
-    "Microsoft.Dnx.Compilation": ""
-
+    "Shaman.ProcessUtils": "1.0.1.5"
   },
 
   "frameworks": {
@@ -44,9 +44,10 @@
         "System.Threading.Tasks": "4.0.0.0"
 
       }
-    },
+    }
 
-  },
+  }
 
+ 
 
 }

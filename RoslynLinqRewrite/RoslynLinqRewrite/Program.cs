@@ -10,6 +10,11 @@ using System.Text;
 using System.Threading.Tasks;
 using System.Xml.Linq;
 using System.Reflection;
+#if false
+using Microsoft.Dnx.Runtime;
+using Microsoft.Dnx.Tooling;
+using Microsoft.Dnx.Runtime.Common.CommandLine;
+#endif
 
 namespace RoslynLinqRewrite
 {
@@ -18,11 +23,22 @@ namespace RoslynLinqRewrite
         private static bool NoRewrite;
         private static bool ForProjBuild;
         private static bool WriteFiles;
-        
-        static int Main(string[] args)
+#if false
+        private static IServiceProvider _hostServices;
+        private static IApplicationEnvironment _environment;
+        private static IRuntimeEnvironment _runtimeEnv;
+        public Program(IServiceProvider hostServices, IApplicationEnvironment environment, IRuntimeEnvironment runtimeEnv)
+        {
+            _hostServices = hostServices;
+            _environment = environment;
+            _runtimeEnv = runtimeEnv;
+        }
+#endif
+        public int Main(string[] args)
         {
             try
             {
+
                 // how do dnu commands installs really work?
                 if (args.FirstOrDefault() == "RoslynLinqRewrite") args = args.Skip(1).ToArray();
 
@@ -32,7 +48,19 @@ namespace RoslynLinqRewrite
                 if (posargs.Count >= 1)
                 {
                     WriteFiles = false;
-                    CompileSolution(posargs.First(), posargs.ElementAtOrDefault(1));
+                    var dir = Path.GetFullPath(Path.Combine(Directory.GetCurrentDirectory(), posargs.First()));
+                    if (Directory.Exists(dir) || Path.GetExtension(dir) == ".json")
+                    {
+#if false
+                        CompileProjectJson(Directory.Exists(dir) ? Path.Combine(dir, "project.json") : dir);
+#else
+                        throw new Exception("Compiling project.json projects is not supported.");
+#endif
+                    }
+                    else
+                    {
+                        CompileSolution(posargs.First(), posargs.ElementAtOrDefault(1));
+                    }
                 }
                 return 0;
             }
@@ -132,6 +160,34 @@ var k = arr2.Where(x => x.StartsWith(""t"")).Select(x=>x==""miao"").LastOrDefaul
 #endif
         }
 
+#if false
+        public static Reports CreateReports(bool verbose, bool quiet)
+        {
+            bool useConsoleColor = _runtimeEnv.OperatingSystem == "Windows";
+            IReport report = new Report(AnsiConsole.GetOutput(useConsoleColor));
+            Reports reports = new Reports
+            {
+                Information = report,
+                Verbose = verbose ? report : Reports.Constants.NullReport,
+                Error = new Report(AnsiConsole.GetError(useConsoleColor))
+            };
+            reports.Quiet = (quiet ? reports.Verbose : report);
+            return reports;
+        }
+
+        private static void CompileProjectJson(string v)
+        {
+            var buildOptions = new BuildOptions();
+            buildOptions.Reports = CreateReports(true, false);
+            buildOptions.GeneratePackages = false;
+            var mgr = new BuildManager(_hostServices, buildOptions);
+            buildOptions.ProjectPatterns.Add(Path.Combine(Directory.GetCurrentDirectory(), "project.json"));
+            if (!mgr.Build())
+            {
+                throw new Exception("Build did not succeed.");
+            }
+        }
+#endif
         private static void PrintDiagnostic(Diagnostic item)
         {
             if (item.Severity == DiagnosticSeverity.Hidden) return;
@@ -175,7 +231,7 @@ var k = arr2.Where(x => x.StartsWith(""t"")).Select(x=>x==""miao"").LastOrDefaul
 
         }
 
-        private static void CompileProject(Project project)
+        private static void CompileProject(Microsoft.CodeAnalysis.Project project)
         {
             project = project.WithParseOptions(((CSharpParseOptions)project.ParseOptions).WithPreprocessorSymbols(project.ParseOptions.PreprocessorSymbolNames.Concat(new[] { "LINQREWRITE" })));
             var compilation = project.GetCompilationAsync().Result;
@@ -251,13 +307,13 @@ var k = arr2.Where(x => x.StartsWith(""t"")).Select(x=>x==""miao"").LastOrDefaul
                 {
                     File.Delete(resource);
                 }
-                
-                var args =new object[] { project.FilePath, new Shaman.Runtime.ProcessUtils.RawCommandLineArgument("/p:Configuration=Release") };
+
+                var args = new object[] { project.FilePath, new Shaman.Runtime.ProcessUtils.RawCommandLineArgument("/p:Configuration=Release") };
                 try
                 {
                     ProcessUtils.RunPassThrough("msbuild", args);
                 }
-                catch (Exception ex) when(!(ex is ProcessException))
+                catch (Exception ex) when (!(ex is ProcessException))
                 {
                     ProcessUtils.RunPassThrough("xbuild", args);
                 }
