@@ -7,7 +7,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace RoslynLinqRewrite
+namespace Shaman.Roslyn.LinqRewrite
 {
     public static class ExtensionMethods
     {
