@@ -12,19 +12,19 @@ using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace RoslynLinqRewrite
+namespace Shaman.Roslyn.LinqRewrite
 {
     public partial class LinqRewriter : CSharpSyntaxRewriter
     {
         private SemanticModel semantic;
 
-        private Project project;
-        public LinqRewriter(Project project, SemanticModel semantic, DocumentId docid)
+        
+        public LinqRewriter(SemanticModel semantic)
         {
-            this.docid = docid;
-            this.project = project;
             this.semantic = semantic;
         }
+        public int RewrittenMethods { get; private set; }
+        public int RewrittenLinqQueries { get; private set; }
         static LinqRewriter()
         {
 
@@ -47,7 +47,11 @@ namespace RoslynLinqRewrite
             try
             {
                 var k = TryVisitInvocationExpression(node, containingForEach);
-                if (k != null) return k;
+                if (k != null)
+                {
+                    RewrittenLinqQueries++;
+                    return k;
+                }
             }
             catch (Exception ex) when (ex is InvalidCastException || ex is NotSupportedException)
             {
@@ -97,7 +101,6 @@ namespace RoslynLinqRewrite
                     if (!chain.Any(x => x.Arguments.Any(y => y is AnonymousFunctionExpressionSyntax))) return null;
                     if (chain.Count == 1 && RootMethodsThatRequireYieldReturn.Contains(chain[0].MethodName)) return null;
 
-                    if (currentMethodName == "SetBlogConfigAsync") Debugger.Break();
 
                     var flowsIn = new List<ISymbol>();
                     var flowsOut = new List<ISymbol>();
@@ -186,7 +189,13 @@ namespace RoslynLinqRewrite
         public override SyntaxNode VisitMethodDeclaration(MethodDeclarationSyntax node)
         {
             if (HasNoRewriteAttribute(node.AttributeLists)) return node;
-            return base.VisitMethodDeclaration(node);
+            var old = RewrittenLinqQueries;
+            var k = base.VisitMethodDeclaration(node);
+            if (RewrittenLinqQueries != old)
+            {
+                RewrittenMethods++;
+            }
+            return k;
         }
 
         private bool HasNoRewriteAttribute(SyntaxList<AttributeListSyntax> attributeLists)
@@ -272,8 +281,8 @@ namespace RoslynLinqRewrite
             return null;
         }
 
-        const string ItemsName = "theitems";
-        const string ItemName = "theitem";
+        const string ItemsName = "_linqitems";
+        const string ItemName = "_linqitem";
         private class VariableCapture
 
         {
@@ -379,7 +388,7 @@ namespace RoslynLinqRewrite
         private bool currentMethodIsStatic;
         private string currentMethodName;
         private IEnumerable<VariableCapture> currentFlow;
-        private DocumentId docid;
+        
 
         public override SyntaxNode VisitStructDeclaration(StructDeclarationSyntax node)
         {

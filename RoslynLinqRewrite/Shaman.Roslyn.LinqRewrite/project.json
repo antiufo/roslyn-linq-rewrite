@@ -1,0 +1,47 @@
+{
+  "version": "1.0.0-beta-3282",
+  "authors": [
+    "Andrea Martinelli"
+  ],
+  "description": "Compiles a project by rewriting LINQ expressions into fast, procedural code with minimal allocations.",
+  "buildOptions": {
+    "compile": {
+      "include": [
+        "../RoslynLinqRewrite/*.cs",
+        "../RoslynLinqRewrite/Properties/*.cs"
+      ],
+      "excludeFiles": [
+        "../RoslynLinqRewrite/Program.cs",
+        "../RoslynLinqRewrite/ExitException.cs"
+      ]
+    },
+    "keyFile": "../../ShamanOpenSourceKey.snk"
+  },
+  "dependencies": {
+    "Microsoft.CodeAnalysis.CSharp.Workspaces": "1.3.2"
+  },
+  "frameworks": {
+    "netstandard1.3": {
+      "compilationOptions": {
+        "define": [
+          "CORECLR"
+        ]
+      },
+      "imports": [
+        "portable-net45+win8+wp8+wpa81"
+      ],
+      "dependencies": {
+        "System.Runtime": "4.1",
+        "System.Runtime.Extensions": "4.1",
+        "System.Linq": "4.1",
+        "System.Console": "4.0.0",
+        "System.Reflection": "4.1",
+        "System.Xml.XDocument": "4.0.11",
+        "System.Diagnostics.Process": "4.1.0"
+      }
+    },
+    "net46": {
+      "frameworkAssemblies": {}
+    }
+  }
+}

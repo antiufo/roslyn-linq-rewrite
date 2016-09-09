@@ -1,6 +1,6 @@
 ﻿using System;
 
-namespace RoslynLinqRewrite
+namespace Shaman.Roslyn.LinqRewrite
 {
     internal class ExitException : Exception
     {

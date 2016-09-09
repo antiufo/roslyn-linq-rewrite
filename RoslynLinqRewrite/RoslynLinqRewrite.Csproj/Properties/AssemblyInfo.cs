@@ -5,7 +5,14 @@ using System.Runtime.InteropServices;
 // General Information about an assembly is controlled through the following 
 // set of attributes. Change these attribute values to modify the information
 // associated with an assembly.
-[assembly: AssemblyCopyright("Copyright © Andrea Martinelli 2016")]
+[assembly: AssemblyTitle("RoslynLinqRewrite.Csproj")]
+[assembly: AssemblyDescription("")]
+[assembly: AssemblyConfiguration("")]
+[assembly: AssemblyCompany("")]
+[assembly: AssemblyProduct("RoslynLinqRewrite.Csproj")]
+[assembly: AssemblyCopyright("Copyright ©  2016")]
+[assembly: AssemblyTrademark("")]
+[assembly: AssemblyCulture("")]
 
 // Setting ComVisible to false makes the types in this assembly not visible 
 // to COM components.  If you need to access a type in this assembly from 
@@ -13,7 +20,7 @@ using System.Runtime.InteropServices;
 [assembly: ComVisible(false)]
 
 // The following GUID is for the ID of the typelib if this project is exposed to COM
-[assembly: Guid("ad794367-b900-4359-bfbf-d916d39f7adc")]
+[assembly: Guid("598c85b2-a90c-4637-9f29-6dfebfd6f638")]
 
 // Version information for an assembly consists of the following four values:
 //

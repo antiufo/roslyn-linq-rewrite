@@ -7,7 +7,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace RoslynLinqRewrite
+namespace Shaman.Roslyn.LinqRewrite
 {
     public partial class LinqRewriter : CSharpSyntaxRewriter
     {
@@ -593,7 +593,7 @@ namespace RoslynLinqRewrite
             {
                 var newtype = ((GenericNameSyntax)((MemberAccessExpressionSyntax)step.Invocation.Expression).Name).TypeArgumentList.Arguments.First();
 
-                var newname = "gattone" + ++lastId;
+                var newname = "_linqitem" + ++lastId;
 
                 var next = CreateProcessingStep(chain, chainIndex - 1, newtype, newname, arguments, noAggregation);
 
@@ -629,7 +629,7 @@ namespace RoslynLinqRewrite
             {
                 var lambda = (LambdaExpressionSyntax)step.Arguments[0];
 
-                var newname = "gattone" + ++lastId;
+                var newname = "_linqitem" + ++lastId;
                 var lambdaType = (INamedTypeSymbol)semantic.GetTypeInfo(lambda).ConvertedType;
                 var lambdaBodyType = lambdaType.TypeArguments.Last();
                 var newtype = IsAnonymousType(lambdaBodyType) ? null : SyntaxFactory.ParseTypeName(lambdaBodyType.ToDisplayString());

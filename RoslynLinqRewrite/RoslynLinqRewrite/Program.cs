@@ -16,7 +16,7 @@ using Microsoft.Dnx.Tooling;
 using Microsoft.Dnx.Runtime.Common.CommandLine;
 #endif
 
-namespace RoslynLinqRewrite
+namespace Shaman.Roslyn.LinqRewrite
 {
     class Program
     {
@@ -34,7 +34,12 @@ namespace RoslynLinqRewrite
             _runtimeEnv = runtimeEnv;
         }
 #endif
-        public int Main(string[] args)
+        public static int Main(string[] args)
+        {
+            var p = new Program();
+            return p.MainInternal(args);
+        }
+        private int MainInternal(string[] args)
         {
             try
             {
@@ -84,9 +89,11 @@ namespace RoslynLinqRewrite
             }
             if (true)
             {
+
                 //CompileSolution(@"D:\Repositories\shaman-fizzler\Fizzler.sln", "Fizzler", false);
                 //CompileSolution(@"C:\Repositories\Awdee\Shaman.ApiServer.sln", "Shaman.Core", true);
-                CompileSolution(@"C:\Repositories\Awdee\Shaman.ApiServer.sln", "Shaman.Inferring.FullLogic");
+                //ConvertToJava();
+                //CompileSolution(@"C:\Repositories\Awdee\Shaman.ApiServer.sln", "Shaman.Inferring.FullLogic");
                 return 0;
             }
 
@@ -148,7 +155,7 @@ var k = arr2.Where(x => x.StartsWith(""t"")).Select(x=>x==""miao"").LastOrDefaul
             if (hasErrs) return 1;
 
             var syntaxTree = doc.GetSyntaxTreeAsync().Result;
-            var rewriter = new LinqRewriter(proj, comp.GetSemanticModel(syntaxTree), doc.Id);
+            var rewriter = new LinqRewriter(comp.GetSemanticModel(syntaxTree));
             var rewritten = rewriter.Visit(syntaxTree.GetRoot());
             proj = doc.WithSyntaxRoot(rewritten).Project;
 
@@ -252,7 +259,7 @@ var k = arr2.Where(x => x.StartsWith(""t"")).Select(x=>x==""miao"").LastOrDefaul
                     Console.WriteLine(doc.FilePath);
                     var syntaxTree = doc.GetSyntaxTreeAsync().Result;
 
-                    var rewriter = new LinqRewriter(project, compilation.GetSemanticModel(syntaxTree), doc.Id);
+                    var rewriter = new LinqRewriter(compilation.GetSemanticModel(syntaxTree));
 
                     var rewritten = rewriter.Visit(syntaxTree.GetRoot()).NormalizeWhitespace();
                     if (WriteFiles)
