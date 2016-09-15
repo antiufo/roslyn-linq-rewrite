@@ -10,6 +10,9 @@
         "../RoslynLinqRewrite/*.cs",
         "../RoslynLinqRewrite/Properties/*.cs"
       ],
+      "exclude": [
+        "../RoslynLinqRewrite/Samples/"
+      ],
       "excludeFiles": [
         "../RoslynLinqRewrite/Program.cs",
         "../RoslynLinqRewrite/ExitException.cs"

@@ -41,97 +41,15 @@ namespace Shaman.Roslyn.LinqRewrite
         }
         private int MainInternal(string[] args)
         {
-            try
-            {
 
-                // how do dnu commands installs really work?
-                if (args.FirstOrDefault() == "RoslynLinqRewrite") args = args.Skip(1).ToArray();
-
-                NoRewrite = args.Contains("--norewrite");
-                ForProjBuild = args.Contains("--projbuild");
-                var posargs = args.Where(x => !x.StartsWith("-")).ToList();
-                if (posargs.Count >= 1)
-                {
-                    WriteFiles = false;
-                    var dir = Path.GetFullPath(Path.Combine(Directory.GetCurrentDirectory(), posargs.First()));
-                    if (Directory.Exists(dir) || Path.GetExtension(dir) == ".json")
-                    {
-#if false
-                        CompileProjectJson(Directory.Exists(dir) ? Path.Combine(dir, "project.json") : dir);
-#else
-                        throw new Exception("Compiling project.json projects is not supported.");
-#endif
-                    }
-                    else
-                    {
-                        CompileSolution(posargs.First(), posargs.ElementAtOrDefault(1));
-                    }
-                }
-                return 0;
-            }
-            catch (ExitException ex)
-            {
-                return ex.Code;
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine(ex.Message);
-                Console.WriteLine(ex.StackTrace);
-                return 1;
-            }
+            CompileExample("Example2.cs");
 
 
-
-            if (!args.Contains("--VisualStudio"))
-            {
-                Console.WriteLine("LinqRewrite <path-to-sln> [project-name]");
-                return 1;
-            }
-            if (true)
-            {
-
-                //CompileSolution(@"D:\Repositories\shaman-fizzler\Fizzler.sln", "Fizzler", false);
-                //CompileSolution(@"C:\Repositories\Awdee\Shaman.ApiServer.sln", "Shaman.Core", true);
-                //ConvertToJava();
-                //CompileSolution(@"C:\Repositories\Awdee\Shaman.ApiServer.sln", "Shaman.Inferring.FullLogic");
-                return 0;
-            }
-
-
-
-            var code = @"
-using System;
-using System.Collections.Generic;
-using System.Linq;
-
-static class Meow
-{
-    static void Main()
-    {
-var sdfsdf = (new Exception()).RecursiveEnumeration(x => x.InnerException).Last();
-        var arr = new []{ 5, 457, 7464, 66 };
-        var arr2 = new []{ ""a"", ""b"" };
-        var capture = 5;
-        var meow = 2;
-var k = arr2.Where(x => x.StartsWith(""t"")).Select(x=>x==""miao"").LastOrDefault();
-         //var k = arr.Where(x =>x > capture).Where(x =>x != 0).Select(x =>{return (double)x - 4;}).Where(x => x < 99).Any(x => x == 100);
-       // var ka = arr.Sum();
-    }
-    public static IEnumerable<T> RecursiveEnumeration<T>(this T first, Func<T, T> parent)
-        {
-            var current = first;
-            while (current != null)
-            {
-                yield return current;
-                current = parent(current);
-            }
+            return 0;
         }
-}
-";
-            //var syntaxTree = Microsoft.CodeAnalysis.CSharp.CSharpSyntaxTree.ParseText(code);
 
-
-#if !CORECLR
+        private void CompileExample(string path)
+        {
 
             var workspace = new AdhocWorkspace();
             var proj = workspace.AddProject("LinqRewriteExample", "C#").WithMetadataReferences(
@@ -140,7 +58,8 @@ var k = arr2.Where(x => x.StartsWith(""t"")).Select(x=>x==""miao"").LastOrDefaul
                 MetadataReference.CreateFromFile(typeof(System.Linq.Enumerable).GetTypeInfo().Assembly.Location),
                 }
                 ).WithCompilationOptions(new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
-            var doc = proj.AddDocument("source.cs", code);
+            var doc = proj.AddDocument("source.cs", File.ReadAllText(Path.Combine("../../Samples/", path)));
+            proj = proj.AddDocument("FastLinqExtensions.cs", File.ReadAllText("../../../Shaman.FastLinq.Sources/FastLinqExtensions.cs")).Project;
             if (!workspace.TryApplyChanges(doc.Project.Solution)) throw new Exception();
             proj = doc.Project;
             var comp = proj.GetCompilationAsync().Result;
@@ -152,49 +71,26 @@ var k = arr2.Where(x => x.StartsWith(""t"")).Select(x=>x==""miao"").LastOrDefaul
                 PrintDiagnostic(item);
             }
 
-            if (hasErrs) return 1;
+            if (hasErrs) return;
 
             var syntaxTree = doc.GetSyntaxTreeAsync().Result;
             var rewriter = new LinqRewriter(comp.GetSemanticModel(syntaxTree));
             var rewritten = rewriter.Visit(syntaxTree.GetRoot());
             proj = doc.WithSyntaxRoot(rewritten).Project;
 
-
+            hasErrs = false;
             foreach (var item in proj.GetCompilationAsync().Result.GetDiagnostics())
             {
+                if (item.Severity == DiagnosticSeverity.Error) hasErrs = true;
+                if (item.Severity == DiagnosticSeverity.Warning) continue;
                 PrintDiagnostic(item);
             }
-#endif
+            if (hasErrs) return;
+            Console.WriteLine(rewritten.ToString());
+
+
         }
 
-#if false
-        public static Reports CreateReports(bool verbose, bool quiet)
-        {
-            bool useConsoleColor = _runtimeEnv.OperatingSystem == "Windows";
-            IReport report = new Report(AnsiConsole.GetOutput(useConsoleColor));
-            Reports reports = new Reports
-            {
-                Information = report,
-                Verbose = verbose ? report : Reports.Constants.NullReport,
-                Error = new Report(AnsiConsole.GetError(useConsoleColor))
-            };
-            reports.Quiet = (quiet ? reports.Verbose : report);
-            return reports;
-        }
-
-        private static void CompileProjectJson(string v)
-        {
-            var buildOptions = new BuildOptions();
-            buildOptions.Reports = CreateReports(true, false);
-            buildOptions.GeneratePackages = false;
-            var mgr = new BuildManager(_hostServices, buildOptions);
-            buildOptions.ProjectPatterns.Add(Path.Combine(Directory.GetCurrentDirectory(), "project.json"));
-            if (!mgr.Build())
-            {
-                throw new Exception("Build did not succeed.");
-            }
-        }
-#endif
         private static void PrintDiagnostic(Diagnostic item)
         {
             if (item.Severity == DiagnosticSeverity.Hidden) return;
