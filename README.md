@@ -73,3 +73,11 @@ namespace Shaman.Runtime
 * dotnet-compile-csc-linq-rewrite, the entrypoint, is available at [antiufo/cli (csc-linq-rewrite branch)](https://github.com/antiufo/cli/tree/csc-linq-rewrite/src/dotnet/commands/dotnet-compile-csc-linq-rewrite)
 * Shaman.Roslyn.LinqRewrite, the rewriting library, is available in the current repository.
 * [LINQ test results](https://github.com/antiufo/linqtests/blob/master/tests/Shaman.Roslyn.LinqRewrite.Tests/Results_diff.diff) (and [code](https://github.com/antiufo/linqtests/blob/master/tests/Shaman.Roslyn.LinqRewrite.Tests/))
+
+## Comparison to LinqOptimizer
+* Code is optimized at build time (as opposed to run time)
+* Uses existing LINQ syntax, no need for `AsQueryExpr().Run()`
+* No allocations for Expression<> trees and enumerator boxing
+* Parallel LINQ is not supported (i.e. left intact)
+* No support for F#
+
