@@ -8,25 +8,25 @@ namespace System.Linq
 {
     internal static partial class FastLinqExtensions
     {
-        public static T Single<T>(this T[] array)
+        public static TSource Single<TSource>(this TSource[] array)
         {
             if (array.Length > 1) throw new InvalidOperationException("Sequence contains more than one element");
             return array[0];
         }
-        public static T Single<T>(this List<T> array)
+        public static TSource Single<TSource>(this List<TSource> array)
         {
             if (array.Count > 1) throw new InvalidOperationException("Sequence contains more than one element");
             return array[0];
         }
-        public static T First<T>(this T[] array)
+        public static TSource First<TSource>(this TSource[] array)
         {
             return array[0];
         }
-        public static T First<T>(this List<T> array)
+        public static TSource First<TSource>(this List<TSource> array)
         {
             return array[0];
         }
-        public static T First<T>(this T[] array, Func<T, bool> condition)
+        public static TSource First<TSource>(this TSource[] array, Func<TSource, bool> condition)
         {
             for (int i = 0; i < array.Length; i++)
             {
@@ -35,7 +35,7 @@ namespace System.Linq
             throw new InvalidOperationException("No items match the specified search criteria.");
         }
 
-        public static T First<T>(this List<T> array, Func<T, bool> condition)
+        public static TSource First<TSource>(this List<TSource> array, Func<TSource, bool> condition)
         {
             var len = array.Count;
             for (int i = 0; i < len; i++)
@@ -44,22 +44,22 @@ namespace System.Linq
             }
             throw new InvalidOperationException("No items match the specified search criteria.");
         }
-        public static T FirstOrDefault<T>(this T[] array, Func<T, bool> condition)
+        public static TSource FirstOrDefault<TSource>(this TSource[] array, Func<TSource, bool> condition)
         {
             for (int i = 0; i < array.Length; i++)
             {
                 if (condition(array[i])) return array[i];
             }
-            return default(T);
+            return default(TSource);
         }
-        public static T FirstOrDefault<T>(this List<T> array, Func<T, bool> condition)
+        public static TSource FirstOrDefault<TSource>(this List<TSource> array, Func<TSource, bool> condition)
         {
             var len = array.Count;
             for (int i = 0; i < len; i++)
             {
                 if (condition(array[i])) return array[i];
             }
-            return default(T);
+            return default(TSource);
         }
 
         public static bool Contains(this string str, char ch)
@@ -67,44 +67,44 @@ namespace System.Linq
             return str.IndexOf(ch) != -1;
         }
 
-        public static T FirstOrDefault<T>(this T[] array)
+        public static TSource FirstOrDefault<TSource>(this TSource[] array)
         {
-            return array.Length == 0 ? default(T) : array[0];
+            return array.Length == 0 ? default(TSource) : array[0];
         }
 
-        public static T FirstOrDefault<T>(this List<T> array)
+        public static TSource FirstOrDefault<TSource>(this List<TSource> array)
         {
-            return array.Count == 0 ? default(T) : array[0];
+            return array.Count == 0 ? default(TSource) : array[0];
         }
-        public static T SingleOrDefault<T>(this T[] array)
+        public static TSource SingleOrDefault<TSource>(this TSource[] array)
         {
             if (array.Length > 1) throw new InvalidOperationException("Sequence contains more than one element");
-            return array.Length == 0 ? default(T) : array[0];
+            return array.Length == 0 ? default(TSource) : array[0];
         }
 
-        public static T SingleOrDefault<T>(this List<T> array)
+        public static TSource SingleOrDefault<TSource>(this List<TSource> array)
         {
             if (array.Count > 1) throw new InvalidOperationException("Sequence contains more than one element");
-            return array.Count == 0 ? default(T) : array[0];
+            return array.Count == 0 ? default(TSource) : array[0];
         }
-        public static T Last<T>(this List<T> array)
+        public static TSource Last<TSource>(this List<TSource> array)
         {
             return array[array.Count - 1];
         }
-        public static T Last<T>(this T[] array)
+        public static TSource Last<TSource>(this TSource[] array)
         {
             return array[array.Length - 1];
         }
-        public static T LastOrDefault<T>(this List<T> array)
+        public static TSource LastOrDefault<TSource>(this List<TSource> array)
         {
-            return array.Count == 0 ? default(T) : array[array.Count - 1];
+            return array.Count == 0 ? default(TSource) : array[array.Count - 1];
         }
-        public static T LastOrDefault<T>(this T[] array)
+        public static TSource LastOrDefault<TSource>(this TSource[] array)
         {
-            return array.Length == 0 ? default(T) : array[array.Length - 1];
+            return array.Length == 0 ? default(TSource) : array[array.Length - 1];
         }
 #if !LINQREWRITE
-        public static bool Any<T>(this T[] array, Func<T, bool> condition)
+        public static bool Any<TSource>(this TSource[] array, Func<TSource, bool> condition)
         {
             for (int i = 0; i < array.Length; i++)
             {
@@ -113,16 +113,16 @@ namespace System.Linq
             return false;
         }
 #endif
-        public static bool Any<T>(this List<T> array)
+        public static bool Any<TSource>(this List<TSource> array)
         {
             return array.Count != 0;
         }
-        public static bool Any<T>(this T[] array)
+        public static bool Any<TSource>(this TSource[] array)
         {
             return array.Length != 0;
         }
 #if !LINQREWRITE
-        public static bool Any<T>(this List<T> array, Func<T, bool> condition)
+        public static bool Any<TSource>(this List<TSource> array, Func<TSource, bool> condition)
         {
             var len = array.Count;
             for (int i = 0; i < len; i++)
@@ -131,7 +131,7 @@ namespace System.Linq
             }
             return false;
         }
-        public static bool All<T>(this T[] array, Func<T, bool> condition)
+        public static bool All<TSource>(this TSource[] array, Func<TSource, bool> condition)
         {
             for (int i = 0; i < array.Length; i++)
             {
@@ -139,7 +139,7 @@ namespace System.Linq
             }
             return true;
         }
-        public static bool All<T>(this List<T> array, Func<T, bool> condition)
+        public static bool All<TSource>(this List<TSource> array, Func<TSource, bool> condition)
         {
             var len = array.Count;
             for (int i = 0; i < len; i++)
@@ -149,38 +149,38 @@ namespace System.Linq
             return true;
         }
 #endif
-        public static T[] ToArray<T>(this List<T> array)
+        public static TSource[] ToArray<TSource>(this List<TSource> array)
         {
             var len = array.Count;
-            var dest = new T[len];
+            var dest = new TSource[len];
             for (int i = 0; i < dest.Length; i++)
             {
                 dest[i] = array[i];
             }
             return dest;
         }
-        public static T[] ToArray<T>(this T[] array)
+        public static TSource[] ToArray<TSource>(this TSource[] array)
         {
-            var dest = new T[array.Length];
+            var dest = new TSource[array.Length];
             for (int i = 0; i < dest.Length; i++)
             {
                 dest[i] = array[i];
             }
             return dest;
         }
-        public static List<T> ToList<T>(this List<T> array)
+        public static List<TSource> ToList<TSource>(this List<TSource> array)
         {
             var len = array.Count;
-            var dest = new List<T>(len);
+            var dest = new List<TSource>(len);
             for (int i = 0; i < len; i++)
             {
                 dest.Add(array[i]);
             }
             return dest;
         }
-        public static List<T> ToList<T>(this T[] array)
+        public static List<TSource> ToList<TSource>(this TSource[] array)
         {
-            var dest = new List<T>(array.Length);
+            var dest = new List<TSource>(array.Length);
             for (int i = 0; i < array.Length; i++)
             {
                 dest.Add(array[i]);
