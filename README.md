@@ -72,4 +72,4 @@ namespace Shaman.Runtime
 ## Development
 * dotnet-compile-csc-linq-rewrite, the entrypoint, is available at [antiufo/cli (csc-linq-rewrite branch)](https://github.com/antiufo/cli/tree/csc-linq-rewrite/src/dotnet/commands/dotnet-compile-csc-linq-rewrite)
 * Shaman.Roslyn.LinqRewrite, the rewriting library, is available in the current repository.
-* [LINQ tests](https://github.com/antiufo/linqtests/)
+* [LINQ test results](https://github.com/antiufo/linqtests/blob/master/tests/Shaman.Roslyn.LinqRewrite.Tests/Results_diff.diff) (and [code](https://github.com/antiufo/linqtests/blob/master/tests/Shaman.Roslyn.LinqRewrite.Tests/))
