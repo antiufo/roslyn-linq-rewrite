@@ -4,17 +4,9 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-#if DBLINQ
-namespace DbLinq
-#else
 namespace System.Linq
-#endif
 {
-#if DBLINQ
     internal static partial class FastLinqExtensions
-#else
-    public static class FastLinqExtensions
-#endif
     {
         public static T First<T>(this T[] array)
         {
