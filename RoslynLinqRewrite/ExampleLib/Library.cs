@@ -5,11 +5,12 @@ namespace ClassLibrary
 {
     public class Class1
     {
-        public void Method1()
+        public int Method1()
         {
 
-            var k = new[] { 1, 2, 3, 4 };
-            var m = k.Where(x => x > 2).Sum();
+            var arr = new[] { 1, 2, 3, 4 };
+            var q = 2;
+            return arr.Where(x => x > q).Select(x => x + 3).Sum();
         }
     }
 }
