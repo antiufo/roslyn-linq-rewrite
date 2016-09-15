@@ -8,6 +8,16 @@ namespace System.Linq
 {
     internal static partial class FastLinqExtensions
     {
+        public static T Single<T>(this T[] array)
+        {
+            if (array.Length > 1) throw new InvalidOperationException("Sequence contains more than one element");
+            return array[0];
+        }
+        public static T Single<T>(this List<T> array)
+        {
+            if (array.Count > 1) throw new InvalidOperationException("Sequence contains more than one element");
+            return array[0];
+        }
         public static T First<T>(this T[] array)
         {
             return array[0];
@@ -16,7 +26,6 @@ namespace System.Linq
         {
             return array[0];
         }
-#if !LINQREWRITE
         public static T First<T>(this T[] array, Func<T, bool> condition)
         {
             for (int i = 0; i < array.Length; i++)
@@ -52,7 +61,6 @@ namespace System.Linq
             }
             return default(T);
         }
-#endif
 
         public static bool Contains(this string str, char ch)
         {
@@ -66,6 +74,17 @@ namespace System.Linq
 
         public static T FirstOrDefault<T>(this List<T> array)
         {
+            return array.Count == 0 ? default(T) : array[0];
+        }
+        public static T SingleOrDefault<T>(this T[] array)
+        {
+            if (array.Length > 1) throw new InvalidOperationException("Sequence contains more than one element");
+            return array.Length == 0 ? default(T) : array[0];
+        }
+
+        public static T SingleOrDefault<T>(this List<T> array)
+        {
+            if (array.Count > 1) throw new InvalidOperationException("Sequence contains more than one element");
             return array.Count == 0 ? default(T) : array[0];
         }
         public static T Last<T>(this List<T> array)
