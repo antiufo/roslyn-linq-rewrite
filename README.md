@@ -46,7 +46,7 @@ private int Method1_ProceduralLinq1(int[] _linqitems, int q)
 ```json
     "tools": {
         "dotnet-compile-csc-linq-rewrite": {
-          "version": "1.0.1.7",
+          "version": "1.0.1.9",
           "imports": "portable-net45+win8+wp8+wpa81"
         }
     }
@@ -74,10 +74,12 @@ namespace Shaman.Runtime
 * Shaman.Roslyn.LinqRewrite, the rewriting library, is available in the current repository.
 * [LINQ test results](https://github.com/antiufo/linqtests/blob/master/tests/Shaman.Roslyn.LinqRewrite.Tests/Results_diff.diff) (and [code](https://github.com/antiufo/linqtests/blob/master/tests/Shaman.Roslyn.LinqRewrite.Tests/))
 
+## Shaman.FastLinq
+To further reduce allocations, install `Shaman.FastLinq` or `Shaman.FastLinq.Sources`. These packages include LINQ methods specific for `T[]` and `List<>` (not all method calls are optimized by LINQ rewrite, like individual, non-chained `.First()` or `.Last()` calls).
+
 ## Comparison to LinqOptimizer
 * Code is optimized at build time (as opposed to run time)
 * Uses existing LINQ syntax, no need for `AsQueryExpr().Run()`
 * No allocations for Expression<> trees and enumerator boxing
 * Parallel LINQ is not supported (i.e. left intact)
 * No support for F#
-
