@@ -58,8 +58,9 @@ namespace Shaman.Roslyn.LinqRewrite
                 MetadataReference.CreateFromFile(typeof(System.Linq.Enumerable).GetTypeInfo().Assembly.Location),
                 }
                 ).WithCompilationOptions(new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
-            var doc = proj.AddDocument("source.cs", File.ReadAllText(Path.Combine("../../Samples/", path)));
             proj = proj.AddDocument("FastLinqExtensions.cs", File.ReadAllText("../../../Shaman.FastLinq.Sources/FastLinqExtensions.cs")).Project;
+            var doc = proj.AddDocument("source.cs", File.ReadAllText(Path.Combine("../../Samples/", path)));
+            
             if (!workspace.TryApplyChanges(doc.Project.Solution)) throw new Exception();
             proj = doc.Project;
             var comp = proj.GetCompilationAsync().Result;
