@@ -276,7 +276,13 @@ namespace Shaman.Roslyn.LinqRewrite
             var invocation = syntax as InvocationExpressionSyntax;
             if (invocation != null)
             {
-                return (semantic.GetSymbolInfo(invocation.Expression).Symbol as IMethodSymbol)?.OriginalDefinition.ToDisplayString();
+                var n = (semantic.GetSymbolInfo(invocation.Expression).Symbol as IMethodSymbol)?.OriginalDefinition.ToDisplayString();
+                const string ienumerableOfTsource = "System.Collections.Generic.IEnumerable<TSource>";
+                n = n
+                    .Replace("System.Collections.Generic.List<TSource>", ienumerableOfTsource)
+                    .Replace("TSource[]", ienumerableOfTsource);
+                    
+                return n;
             }
             return null;
         }
