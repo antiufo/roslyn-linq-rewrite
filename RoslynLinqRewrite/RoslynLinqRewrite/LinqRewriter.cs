@@ -279,7 +279,7 @@ namespace Shaman.Roslyn.LinqRewrite
                 var n = (semantic.GetSymbolInfo(invocation.Expression).Symbol as IMethodSymbol)?.OriginalDefinition.ToDisplayString();
                 const string ienumerableOfTsource = "System.Collections.Generic.IEnumerable<TSource>";
                 n = n
-                    .Replace("System.Collections.Generic.List<TSource>", ienumerableOfTsource)
+                    ?.Replace("System.Collections.Generic.List<TSource>", ienumerableOfTsource)
                     .Replace("TSource[]", ienumerableOfTsource);
                     
                 return n;
