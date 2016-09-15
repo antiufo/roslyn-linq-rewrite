@@ -1,12 +1,13 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace System.Linq
 {
+#if FAST_LINQ_EXTENSIONS_PUBLIC
+    public static partial class FastLinqExtensions
+#else
     internal static partial class FastLinqExtensions
+#endif
     {
         public static TSource Single<TSource>(this TSource[] array)
         {
@@ -103,7 +104,6 @@ namespace System.Linq
         {
             return array.Length == 0 ? default(TSource) : array[array.Length - 1];
         }
-#if !LINQREWRITE
         public static bool Any<TSource>(this TSource[] array, Func<TSource, bool> condition)
         {
             for (int i = 0; i < array.Length; i++)
@@ -112,7 +112,6 @@ namespace System.Linq
             }
             return false;
         }
-#endif
         public static bool Any<TSource>(this List<TSource> array)
         {
             return array.Count != 0;
@@ -121,7 +120,6 @@ namespace System.Linq
         {
             return array.Length != 0;
         }
-#if !LINQREWRITE
         public static bool Any<TSource>(this List<TSource> array, Func<TSource, bool> condition)
         {
             var len = array.Count;
@@ -148,7 +146,6 @@ namespace System.Linq
             }
             return true;
         }
-#endif
         public static TSource[] ToArray<TSource>(this List<TSource> array)
         {
             var len = array.Count;
