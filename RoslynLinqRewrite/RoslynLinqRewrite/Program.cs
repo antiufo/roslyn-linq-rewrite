@@ -12,6 +12,8 @@ using System.Xml.Linq;
 using System.Reflection;
 using Newtonsoft.Json.Linq;
 using System.Text.RegularExpressions;
+using System.Runtime.InteropServices;
+using System.Diagnostics;
 #if false
 using Microsoft.Dnx.Runtime;
 using Microsoft.Dnx.Tooling;
@@ -43,6 +45,32 @@ namespace Shaman.Roslyn.LinqRewrite
         }
         private int MainInternal(string[] args)
         {
+            var exe = typeof(Program).Assembly.Location;
+            if (Path.GetFileNameWithoutExtension(exe).Equals("csc", StringComparison.OrdinalIgnoreCase))
+            {
+                var master = Path.Combine(Path.GetDirectoryName(exe), "roslyn-linq-rewrite.exe");
+                if (File.Exists(master) && !FilesLookEqual(exe, master))
+                {
+                    Console.WriteLine("csc.exe is out of sync with roslyn-linq-rewrite.exe. Synchronizing executables…");
+                    var tmp = exe + "." + Guid.NewGuid() + ".tmp";
+                    File.Move(exe, tmp);
+                    File.Copy(master, exe, true);
+                    File.Copy(master + ".config", exe + ".config", true);
+                    try
+                    {
+                        File.Delete(tmp);
+                    }
+                    catch
+                    {
+                    }
+
+
+
+                    Console.Error.WriteLine("Synchronized. Please restart the build process");
+                    return 1;
+
+                }
+            }
             var useCsc = args.Contains("--csc") || args.Any(x => x.StartsWith("@") || x.EndsWith(".cs") || x.StartsWith("--reference") || x.StartsWith("-r:") || x.StartsWith("-out:"));
             if (useCsc)
             {
@@ -462,15 +490,17 @@ Options for csc.exe mode:
             {
                 if (File.Exists(dest))
                 {
-                    var sfi = new FileInfo(source);
-                    var dfi = new FileInfo(dest);
-                    if (sfi.LastWriteTimeUtc == dfi.LastWriteTimeUtc && sfi.Length == dfi.Length)
-                    {
-                        return;
-                    }
+                    if (FilesLookEqual(source, dest)) return;
                 }
                 File.Copy(source, dest, true);
             }
+        }
+
+        private static bool FilesLookEqual(string a, string b)
+        {
+            var sfi = new FileInfo(a);
+            var dfi = new FileInfo(b);
+            return sfi.Exists == dfi.Exists && sfi.LastWriteTimeUtc == dfi.LastWriteTimeUtc && sfi.Length == dfi.Length;
         }
     }
 }
