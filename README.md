@@ -21,15 +21,23 @@ public int Method1()
 }
 private int Method1_ProceduralLinq1(int[] _linqitems, int q)
 {
-    if (_linqitems == null) throw new ArgumentNullException();
-
-    int num = 0;
-    for (int i = 0; i < _linqitems.Length; i++)
+    if (_linqitems == null)
+        throw new System.ArgumentNullException();
+    var sum_ = (int)0;
+    for (int _index = 0; _index < _linqitems.Length; _index++)
     {
-        if (_linqitems[i] > q)
-            num += num2 + 3;
+        var _linqitem = _linqitems[_index];
+        if (_linqitem > q)
+        {
+            var _linqitem1 = _linqitem + 3;
+            checked
+            {
+                sum_ += _linqitem1;
+            }
+        }
     }
-    return num;
+
+    return sum_;
 }
 ```
 **Allocations**: input array.
