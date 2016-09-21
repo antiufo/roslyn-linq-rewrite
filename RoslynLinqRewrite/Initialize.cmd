@@ -12,3 +12,7 @@ copy /y %userprofile%\.nuget\packages\System.Linq\4.1.0\lib\net463\*.dll RoslynL
 copy /y %userprofile%\.nuget\packages\System.Runtime.Loader\4.0.0\lib\netstandard1.5\*.dll RoslynLinqRewrite\bin\Debug 
 copy /y %userprofile%\.nuget\packages\System.Runtime.Loader\4.0.0\lib\netstandard1.5\*.dll RoslynLinqRewrite\bin\Release
 
+copy /y %userprofile%\.nuget\packages\Microsoft.DiaSymReader.native\1.5.0-beta1\runtimes\win\native\*.dll RoslynLinqRewrite\bin\Debug
+copy /y %userprofile%\.nuget\packages\Microsoft.DiaSymReader.native\1.5.0-beta1\runtimes\win\native\*.dll RoslynLinqRewrite\bin\Release
+
+
