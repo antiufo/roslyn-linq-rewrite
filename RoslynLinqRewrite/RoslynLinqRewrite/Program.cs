@@ -41,7 +41,7 @@ namespace Shaman.Roslyn.LinqRewrite
         public static int Main(string[] args)
         {
             try
-            { 
+            {
                 var p = new Program();
                 return p.MainInternal(args);
             }
@@ -53,7 +53,10 @@ namespace Shaman.Roslyn.LinqRewrite
         }
         private int MainInternal(string[] args)
         {
+#if DESKTOP
+            EnsureInstalled();
             if (!MaybeSyncCsc()) return 1;
+#endif
 
             var useCsc = !args.Contains("--show") && (args.Contains("--csc") || args.Any(x => x.StartsWith("@") || x.EndsWith(".cs") || x.StartsWith("--reference") || x.StartsWith("-r:") || x.StartsWith("-out:")));
             if (useCsc)
@@ -125,7 +128,7 @@ namespace Shaman.Roslyn.LinqRewrite
                 var projectNames = projectNamesIdx != -1 ? args[projectNamesIdx + 1].Split(',') : null;
 
                 var release = args.Contains("--release");
-                CompileSolution(file, projectNames, release, !args.Contains("--skip-generate-resources"), args.Contains("--internal-build-process"));
+                CompileSolution(file, projectNames, release, !args.Contains("--skip-generate-resources"), args.Contains("--internal-build-process"), args.Contains("--detailed"));
                 if (!release && !args.Contains("--debug"))
                 {
                     Console.WriteLine("Note: for consistency with MSBuild, this tool compiles by default in debug mode. Consider specifying --release.");
@@ -152,6 +155,35 @@ namespace Shaman.Roslyn.LinqRewrite
                 return 1;
             }
 
+        }
+#if DESKTOP
+        private void EnsureInstalled()
+        {
+            var dir = Path.GetDirectoryName(typeof(Program).GetTypeInfo().Assembly.Location);
+            if (!File.Exists(Path.Combine(dir, "installed")) && !dir.Contains("bin\\Debug") && !dir.Contains("bin\\Release") )
+            {
+                var init = Path.Combine(dir, "Shaman.Roslyn.LinqRewrite.Initialization.dll");
+                var exe = Path.Combine(dir, "Shaman.Roslyn.LinqRewrite.Initialization.exe");
+                File.Copy(init, exe, true);
+                var p = new ProcessStartInfo();
+                p.WorkingDirectory = dir;
+                p.UseShellExecute = false;
+                p.Arguments = "--install";
+                p.FileName = Path.Combine(dir, exe);
+                using (var pr = Process.Start(p))
+                {
+                    pr.WaitForExit();
+                    if (pr.ExitCode != 0)
+                        throw new Exception("An error occured.");
+                }
+                try
+                {
+                    File.Delete(exe);
+                }
+                catch
+                {
+                }
+            }
         }
 
         private bool MaybeSyncCsc()
@@ -199,7 +231,7 @@ namespace Shaman.Roslyn.LinqRewrite
 
             return true;
         }
-
+#endif
         private void ConfigureProjectJson(string file)
         {
             var f = File.ReadAllText(file);
@@ -322,7 +354,7 @@ Options for translation preview mode:
             Console.ResetColor();
         }
 
-        private static void CompileSolution(string path, IReadOnlyList<string> projectNames, bool release, bool generateResources, bool useInternalBuildProcess)
+        private static void CompileSolution(string path, IReadOnlyList<string> projectNames, bool release, bool generateResources, bool useInternalBuildProcess, bool detailed)
         {
             if (!useInternalBuildProcess)
             {
@@ -334,9 +366,13 @@ Options for translation preview mode:
                 // MSBuild doesn't take CscToolPath into account when deciding whether to recompile. Rebuild always.
                 a.Add(new Shaman.Runtime.ProcessUtils.RawCommandLineArgument("/t:Rebuild"));
 
+                if (detailed)
+                    a.Add(new Shaman.Runtime.ProcessUtils.RawCommandLineArgument("/verbosity:detailed"));
+
                 if (projectNames != null) throw new ArgumentException("--project is not allowed when --internal-build-process is not used.");
                 a.Add(new Shaman.Runtime.ProcessUtils.RawCommandLineArgument("/p:CscToolPath=\"" + Path.GetDirectoryName(typeof(Program).GetTypeInfo().Assembly.Location) + "\""));
 
+                
                 RunMsbuild(a);
                 return;
             }

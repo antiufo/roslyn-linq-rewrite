@@ -6,7 +6,15 @@
     "define": [
       "CSC_LINQ_REWRITE"
     ],
-    "allowUnsafe": true
+    "allowUnsafe": true,
+    "compile": {
+      "include": [
+        "../RoslynLinqRewrite/*.cs"
+      ],
+      "exclude": [
+        "../RoslynLinqRewrite/Samples/"
+      ]
+    }
   },
   "dependencies": {
     "Microsoft.DotNet.Cli.Utils": "1.0.0-preview2-003121",
@@ -20,9 +28,16 @@
     "Shaman.Csc": "1.3-beta-1",
     "System.Runtime.InteropServices.RuntimeInformation": "4.0.0",
     "System.Diagnostics.FileVersionInfo": "4.0.0",
-    "Shaman.Roslyn.LinqRewrite": "1.0.0-beta-3286"
+    "Shaman.ProcessUtils": "1.0.1.6"
   },
   "frameworks": {
+    "net46": {
+      "buildOptions": {
+        "define": [
+          "DESKTOP"
+        ]
+      }
+    },
     "netcoreapp1.0": {
       "dependencies": {
         "Microsoft.NETCore.App": {
