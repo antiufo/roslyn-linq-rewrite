@@ -71,7 +71,7 @@ namespace Shaman.Roslyn.LinqRewrite
 
                 }
             }
-            var useCsc = args.Contains("--csc") || args.Any(x => x.StartsWith("@") || x.EndsWith(".cs") || x.StartsWith("--reference") || x.StartsWith("-r:") || x.StartsWith("-out:"));
+            var useCsc = !args.Contains("--show") && (args.Contains("--csc") || args.Any(x => x.StartsWith("@") || x.EndsWith(".cs") || x.StartsWith("--reference") || x.StartsWith("-r:") || x.StartsWith("-out:")));
             if (useCsc)
             {
                 args = args.Where(x => x != "--csc").ToArray();
@@ -96,6 +96,14 @@ namespace Shaman.Roslyn.LinqRewrite
             }
 
             var file = args.TakeWhile(x => !x.StartsWith("--")).FirstOrDefault();
+
+            if (args.Contains("--show"))
+            {
+                file = args.FirstOrDefault(x => !x.StartsWith("--"));
+                if (file == null) throw new ArgumentException("No input .cs was specified.");
+                CompileExample(file, false);
+                return 0;
+            }
 
             if (file == null || Directory.Exists(file))
             {
@@ -205,6 +213,7 @@ Usage:
   roslyn-linq-rewrite <path-to-sln> [options]
   roslyn-linq-rewrite <path-to-project-json> --configure
   roslyn-linq-rewrite <standard-csc-parameters>
+  roslyn-linq-rewrite --show <path-to-cs>
 
 Options for project.json:
   --configure                   Configures project.json to use the roslyn-linq-rewrite compiler.
@@ -218,6 +227,9 @@ Options for .sln and .csproj files:
 
 Options for csc.exe mode:
   --csc /?
+
+Options for translation preview mode:
+  --show                        Translates and shows the produced code for a single .cs file
 ");
         }
 
@@ -226,18 +238,19 @@ Options for csc.exe mode:
             CompileExample("Example3.cs");
         }
 
-        private void CompileExample(string path)
+        private void CompileExample(string path, bool devPath = true)
         {
 
             var workspace = new AdhocWorkspace();
             var proj = workspace.AddProject("LinqRewriteExample", "C#").WithMetadataReferences(
                 new[] {
-                MetadataReference.CreateFromFile(typeof(int).GetTypeInfo().Assembly.Location),
-                MetadataReference.CreateFromFile(typeof(System.Linq.Enumerable).GetTypeInfo().Assembly.Location),
+                MetadataReference.CreateFromFile(typeof(int).GetTypeInfo().Assembly.Location), // mscorlib
+                MetadataReference.CreateFromFile(typeof(Uri).GetTypeInfo().Assembly.Location), // System
+                MetadataReference.CreateFromFile(typeof(System.Linq.Enumerable).GetTypeInfo().Assembly.Location), // System.Core
                 }
                 ).WithCompilationOptions(new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
-            proj = proj.AddDocument("FastLinqExtensions.cs", File.ReadAllText("../../../Shaman.FastLinq.Sources/FastLinqExtensions.cs")).Project;
-            var doc = proj.AddDocument("source.cs", File.ReadAllText(Path.Combine("../../Samples/", path)));
+            // proj = proj.AddDocument("FastLinqExtensions.cs", File.ReadAllText("../../../Shaman.FastLinq.Sources/FastLinqExtensions.cs")).Project;
+            var doc = proj.AddDocument("source.cs", File.ReadAllText(devPath ? Path.Combine("../../Samples/", path) : path));
 
             if (!workspace.TryApplyChanges(doc.Project.Solution)) throw new Exception();
             proj = doc.Project;
