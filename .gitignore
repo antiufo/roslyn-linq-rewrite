@@ -126,3 +126,4 @@ ModelManifest.xml
 .vs
 project.lock.json
 launchSettings.json
+.vscode
