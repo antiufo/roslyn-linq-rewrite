@@ -162,6 +162,7 @@ namespace Shaman.Roslyn.LinqRewrite
             var dir = Path.GetDirectoryName(typeof(Program).GetTypeInfo().Assembly.Location);
             if (!File.Exists(Path.Combine(dir, "installed")) && !dir.Contains("bin\\Debug") && !dir.Contains("bin\\Release") )
             {
+                Console.WriteLine("Installing dependencies for first use…");
                 var init = Path.Combine(dir, "Shaman.Roslyn.LinqRewrite.Initialization.dll");
                 var exe = Path.Combine(dir, "Shaman.Roslyn.LinqRewrite.Initialization.exe");
                 File.Copy(init, exe, true);
@@ -542,14 +543,38 @@ Options for translation preview mode:
 
         private static void RunMsbuild(List<object> args)
         {
-
+            var argsArray = args.ToArray();
+            var msbuildCandidates = new[] {
+                @"%ProgramFiles(x86)%\Microsoft Visual Studio\VS16\MSBuild\16.0\Bin\amd64\MSBuild.exe",
+                @"%ProgramFiles(x86)%\Microsoft Visual Studio\VS15\MSBuild\15.0\Bin\amd64\MSBuild.exe",
+                @"%ProgramFiles(x86)%\Microsoft Visual Studio\VS15Preview\MSBuild\15.0\Bin\amd64\MSBuild.exe",
+                @"%ProgramFiles(x86)%\MSBuild\15.0\Bin\amd64\MSBuild.exe",
+                @"%ProgramFiles(x86)%\MSBuild\14.0\Bin\amd64\MSBuild.exe",
+                @"%ProgramFiles(x86)%\MSBuild\12.0\Bin\amd64\MSBuild.exe",
+                @"%SystemRoot%\Microsoft.NET\Framework64\v4.0.30319\MSBuild.exe",
+            };
             try
             {
-                ProcessUtils.RunPassThrough("msbuild", args.ToArray());
+                ProcessUtils.RunPassThrough("msbuild", argsArray);
             }
             catch (Exception ex) when (!(ex is ProcessException))
             {
-                ProcessUtils.RunPassThrough("xbuild", args.ToArray());
+                foreach (var candidate in msbuildCandidates)
+                {
+                    try
+                    {
+                        var path = Environment.ExpandEnvironmentVariables(candidate);
+                        if (File.Exists(path))
+                        {
+                            ProcessUtils.RunPassThrough(path, argsArray);
+                            return;
+                        }
+                    }
+                    catch (Exception)
+                    {
+                    }
+                }
+                ProcessUtils.RunPassThrough("xbuild", argsArray);
             }
         }
 
