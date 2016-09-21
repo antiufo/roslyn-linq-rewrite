@@ -127,3 +127,4 @@ ModelManifest.xml
 project.lock.json
 launchSettings.json
 .vscode
+RoslynLinqRewrite/Shaman.Roslyn.LinqRewrite.Distrib/roslyn-linq-rewrite

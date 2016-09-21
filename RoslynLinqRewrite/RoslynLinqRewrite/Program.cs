@@ -40,8 +40,16 @@ namespace Shaman.Roslyn.LinqRewrite
 #endif
         public static int Main(string[] args)
         {
-            var p = new Program();
-            return p.MainInternal(args);
+            try
+            { 
+                var p = new Program();
+                return p.MainInternal(args);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(ex);
+                return 1;
+            }
         }
         private int MainInternal(string[] args)
         {
@@ -83,7 +91,7 @@ namespace Shaman.Roslyn.LinqRewrite
 
             if (file == null || Directory.Exists(file))
             {
-                var candidates = Directory.EnumerateFiles(file ?? Environment.CurrentDirectory)
+                var candidates = Directory.EnumerateFiles(file ?? Directory.GetCurrentDirectory())
                     .Where(x => Path.GetFileName(x) == "project.json" || Path.GetExtension(x) == ".sln" || Path.GetExtension(x) == ".csproj")
                     .ToList();
                 if (candidates.Count == 0)
@@ -150,7 +158,7 @@ namespace Shaman.Roslyn.LinqRewrite
         {
             if (Debugger.IsAttached) return true;
             // We need a copy of the program called "csc.exe". MSBuild only allows to specify the folder, not the full path of csc (CscToolPath).
-            var exe = typeof(Program).Assembly.Location;
+            var exe = typeof(Program).GetTypeInfo().Assembly.Location;
 
             var dir = Path.GetDirectoryName(exe);
             var master = Path.Combine(dir, "roslyn-linq-rewrite.exe");
@@ -231,7 +239,7 @@ namespace Shaman.Roslyn.LinqRewrite
 
         private void PrintUsage()
         {
-            Console.WriteLine("roslyn-linq-rewrite " + typeof(Program).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion);
+            Console.WriteLine("roslyn-linq-rewrite " + typeof(Program).GetTypeInfo().Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion);
             Console.WriteLine(
 @"github.com/antiufo/roslyn-linq-rewrite
 
@@ -327,7 +335,7 @@ Options for translation preview mode:
                 a.Add(new Shaman.Runtime.ProcessUtils.RawCommandLineArgument("/t:Rebuild"));
 
                 if (projectNames != null) throw new ArgumentException("--project is not allowed when --internal-build-process is not used.");
-                a.Add(new Shaman.Runtime.ProcessUtils.RawCommandLineArgument("/p:CscToolPath=\"" + Path.GetDirectoryName(typeof(Program).Assembly.Location) + "\""));
+                a.Add(new Shaman.Runtime.ProcessUtils.RawCommandLineArgument("/p:CscToolPath=\"" + Path.GetDirectoryName(typeof(Program).GetTypeInfo().Assembly.Location) + "\""));
 
                 RunMsbuild(a);
                 return;
@@ -336,7 +344,7 @@ Options for translation preview mode:
             var properties = new Dictionary<string, string>();
             if (release)
                 properties.Add("Configuration", "Release");
-#if CORECLR
+#if !DESKTOP
             throw new NotSupportedException("Compiling CSPROJ files is not supported on CORECLR");
 #else
             var workspace = Microsoft.CodeAnalysis.MSBuild.MSBuildWorkspace.Create(properties);

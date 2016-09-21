@@ -17,10 +17,6 @@ namespace Microsoft.DotNet.Tools.Compiler.Csc
     public class CompileCscLinqRewriteCommand
     {
 
-        public static int Main(string[] args)
-        {
-            return Run(args);
-        }
 
         private const int ExitFailed = 1;
 
