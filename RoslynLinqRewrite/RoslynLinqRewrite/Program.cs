@@ -26,7 +26,7 @@ namespace Shaman.Roslyn.LinqRewrite
     {
         private static bool NoRewrite;
         private static bool WriteFiles;
-        private readonly static string DotnetCscRewriteVersion = "1.0.1.9";
+        
 #if false
         private static IServiceProvider _hostServices;
         private static IApplicationEnvironment _environment;
@@ -245,7 +245,8 @@ namespace Shaman.Roslyn.LinqRewrite
             }
 
             var rewriteTool = new JObject();
-            rewriteTool["version"] = DotnetCscRewriteVersion;
+            var vers = typeof(Program).GetTypeInfo().Assembly.GetName().Version.ToString();
+            rewriteTool["version"] = vers != "1.0.0.0" ? vers : "1.0.1.11";
             rewriteTool["imports"] = "portable-net45+win8+wp8+wpa81";
             tools["dotnet-compile-csc-linq-rewrite"] = rewriteTool;
 
