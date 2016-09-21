@@ -38,7 +38,13 @@ namespace Microsoft.CodeAnalysis.CommandLine
 
         protected override int RunLocalCompilation(string[] arguments, BuildPaths buildPaths, TextWriter textWriter)
         {
-            return _compileFunc(arguments, buildPaths, textWriter, ReflCoreClrAnalyzerAssemblyLoader.ctor());
+            return _compileFunc(arguments, buildPaths, textWriter,
+#if DESKTOP
+                new DesktopAnalyzerAssemblyLoader()
+#else
+                ReflCoreClrAnalyzerAssemblyLoader.ctor()
+#endif
+                );
         }
 
         protected override string GetSessionKey(BuildPaths buildPaths)

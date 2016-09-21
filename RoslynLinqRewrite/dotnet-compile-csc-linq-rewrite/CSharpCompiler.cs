@@ -20,6 +20,7 @@ using TouchedFileLogger = System.Object;
 using DiagnosticInfo = System.Object;
 using IVsSqmMulti = System.Object;
 using CommandLineDiagnosticFormatter = System.Object;
+using System.Globalization;
 
 namespace Microsoft.CodeAnalysis.CSharp
 {
@@ -204,7 +205,10 @@ namespace Microsoft.CodeAnalysis.CSharp
         {
             if (Arguments.OutputFileName == null)
             {
-                Debug.Assert((bool)Arguments.CompilationOptions.OutputKind.InvokeFunction("IsApplication"));
+                Debug.Assert(
+                    Arguments.CompilationOptions.OutputKind == OutputKind.ConsoleApplication ||
+                    Arguments.CompilationOptions.OutputKind == OutputKind.WindowsApplication ||
+                    Arguments.CompilationOptions.OutputKind == OutputKind.WindowsRuntimeApplication);
 
                 var comp = (CSharpCompilation)compilation;
 
@@ -220,7 +224,7 @@ namespace Microsoft.CodeAnalysis.CSharp
 
                 if ((object)entryPoint != null)
                 {
-                    string entryPointFileName = ReflPathUtilities.GetFileName(entryPoint.Locations.First().SourceTree.FilePath, true);
+                    string entryPointFileName = ReflPathUtilities.GetFileName(entryPoint.Locations.First().SourceTree.FilePath.Replace("(Rewritten)", string.Empty), true);
                     return Path.ChangeExtension(entryPointFileName, ".exe");
                 }
                 else
@@ -246,14 +250,22 @@ namespace Microsoft.CodeAnalysis.CSharp
         /// <param name="consoleOutput"></param>
         public override void PrintLogo(TextWriter consoleOutput)
         {
-            consoleOutput.WriteLine((string)Refl.Type_ErrorFacts.InvokeFunction("GetMessage", MessageID.IDS_LogoLine1, Culture), GetToolName(), GetAssemblyFileVersion());
-            consoleOutput.WriteLine((string)Refl.Type_ErrorFacts.InvokeFunction("GetMessage", MessageID.IDS_LogoLine2, Culture));
+            
+            consoleOutput.WriteLine(ErrorFacts_GetMessage(MessageID.IDS_LogoLine1, Culture), GetToolName(), GetAssemblyFileVersion());
+            consoleOutput.WriteLine(ErrorFacts_GetMessage(MessageID.IDS_LogoLine2, Culture), Culture);
+            consoleOutput.WriteLine("LINQ Rewriter version");
             consoleOutput.WriteLine();
         }
 
         internal override string GetToolName()
         {
-            return (string)Refl.Type_ErrorFacts.InvokeFunction("GetMessage", MessageID.IDS_ToolName, Culture);
+            return ErrorFacts_GetMessage(MessageID.IDS_ToolName, Culture);
+        }
+
+        public static string ErrorFacts_GetMessage(MessageID messageId, CultureInfo culture)
+        {
+            var func = Refl.Type_ErrorFacts.GetMethods().Single(x => x.Name == "GetMessage" && x.GetParameters().Length == 2 && x.GetParameters()[0].ParameterType == Refl.Type_MessageId);
+            return (string)func.Invoke(null, new object[] { Enum.ToObject(Refl.Type_MessageId, (int)messageId), culture });
         }
 
         /// <summary>
@@ -262,7 +274,7 @@ namespace Microsoft.CodeAnalysis.CSharp
         /// <param name="consoleOutput"></param>
         public override void PrintHelp(TextWriter consoleOutput)
         {
-            consoleOutput.WriteLine((string)Refl.Type_ErrorFacts.InvokeFunction("GetMessage", MessageID.IDS_CSCHelp, Culture));
+            consoleOutput.WriteLine(ErrorFacts_GetMessage(MessageID.IDS_CSCHelp, Culture));
         }
 
         protected override bool TryGetCompilerDiagnosticCode(string diagnosticId, out uint code)
@@ -270,9 +282,17 @@ namespace Microsoft.CodeAnalysis.CSharp
             return CommonCompiler.TryGetCompilerDiagnosticCode(diagnosticId, "CS", out code);
         }
 
-        protected override ImmutableArray<DiagnosticAnalyzer> ResolveAnalyzersFromArguments(object diagnostics, CommonMessageProvider messageProvider, TouchedFileLogger touchedFiles)
+        protected override ImmutableArray<DiagnosticAnalyzer> ResolveAnalyzersAndGeneratorsFromArguments(object diagnostics, CommonMessageProvider messageProvider, TouchedFileLogger touchedFiles)
         {
-            return (ImmutableArray<DiagnosticAnalyzer>)Arguments.InvokeFunction("ResolveAnalyzersFromArguments", LanguageNames.CSharp, diagnostics, messageProvider, touchedFiles, AnalyzerLoader);
+            var func = Arguments.GetType().GetMethod("ResolveAnalyzersAndGeneratorsFromArguments", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+            var arr = new object[6];
+            arr[0] = LanguageNames.CSharp;
+            arr[1] = diagnostics;
+            arr[2] = MessageProvider;
+            // TODO What happened to parameter touchedFiles?
+            arr[3] = AnalyzerLoader;
+            func.Invoke(Arguments, arr);
+            return (ImmutableArray<DiagnosticAnalyzer>)arr[4];
         }
     }
 }

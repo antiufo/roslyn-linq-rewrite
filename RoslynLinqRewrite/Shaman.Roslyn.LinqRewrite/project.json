@@ -21,7 +21,7 @@
     "keyFile": "../../ShamanOpenSourceKey.snk"
   },
   "dependencies": {
-    "Microsoft.CodeAnalysis.CSharp.Workspaces": "1.3.2"
+    "Microsoft.CodeAnalysis.CSharp": "2.0.0-beta3" 
   },
   "frameworks": {
     "netstandard1.3": {

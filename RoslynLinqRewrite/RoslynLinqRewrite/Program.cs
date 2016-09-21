@@ -11,6 +11,7 @@ using System.Threading.Tasks;
 using System.Xml.Linq;
 using System.Reflection;
 using Newtonsoft.Json.Linq;
+using System.Text.RegularExpressions;
 #if false
 using Microsoft.Dnx.Runtime;
 using Microsoft.Dnx.Tooling;
@@ -42,7 +43,20 @@ namespace Shaman.Roslyn.LinqRewrite
         }
         private int MainInternal(string[] args)
         {
-            if (args.Contains("-h") || args.Contains("--help") || args.Contains("/?"))
+            var useCsc = args.Contains("--csc") || args.Any(x => x.StartsWith("@") || x.EndsWith(".cs") || x.StartsWith("--reference") || x.StartsWith("-r:") || x.StartsWith("-out:"));
+            if (useCsc)
+            {
+                args = args.Where(x => x != "--csc").ToArray();
+                if (args.Any(x => x.StartsWith("--temp-output:")))
+                {
+                    return Microsoft.DotNet.Tools.Compiler.Csc.CompileCscLinqRewriteCommand.Run(args);
+                }
+                else
+                {
+                    return Microsoft.CodeAnalysis.CSharp.CommandLine.ProgramLinqRewrite.MainInternal(args);
+                }
+            }
+            if ((args.Contains("-h") || args.Contains("--help") || args.Contains("/?")))
             {
                 PrintUsage();
                 return 0;
@@ -52,6 +66,7 @@ namespace Shaman.Roslyn.LinqRewrite
                 Sandbox();
                 return 0;
             }
+
             var file = args.TakeWhile(x => !x.StartsWith("--")).FirstOrDefault();
 
             if (file == null || Directory.Exists(file))
@@ -161,6 +176,7 @@ Usage:
   roslyn-linq-rewrite <path-to-csproj> [options]
   roslyn-linq-rewrite <path-to-sln> [options]
   roslyn-linq-rewrite <path-to-project-json> --configure
+  roslyn-linq-rewrite <standard-csc-parameters>
 
 Options for project.json:
   --configure                   Configures project.json to use the roslyn-linq-rewrite compiler.
@@ -171,6 +187,9 @@ Options for .sln files:
 Options for .sln and .csproj files:
   --debug/--release             Sets the project configuration (default: release)
   --skip-generate-resources     Skips .resources files generation (relies on existing ones)
+
+Options for csc.exe mode:
+  --csc /?
 ");
         }
 
@@ -254,7 +273,7 @@ Options for .sln and .csproj files:
                 solution = workspace.OpenSolutionAsync(path).Result;
                 var projsToCompile = projectNames != null ? solution.Projects.Where(x => projectNames.Contains(x.Name)).Select(x => x.Id).ToList() : null;
 
-                var missing = projectNames.FirstOrDefault(x => !solution.Projects.Any(y => y.Name == x));
+                var missing = projectNames?.FirstOrDefault(x => !solution.Projects.Any(y => y.Name == x));
                 if (missing != null)
                 {
                     throw new ArgumentException("Cannot find project '" + missing + "'.");
@@ -356,7 +375,7 @@ Options for .sln and .csproj files:
             var hasResources = xml
                 .DescendantNodes()
                 .OfType<XElement>()
-                .Where(x => x.Name == ns + "EmbeddedResource" || x.Name == ns + "Resource" || x.Name == ns+ "CopyToOutputDirectory")
+                .Where(x => x.Name == ns + "EmbeddedResource" || x.Name == ns + "Resource" || x.Name == ns + "CopyToOutputDirectory")
                 .Any();
             if (hasResources && generateResources)
             {

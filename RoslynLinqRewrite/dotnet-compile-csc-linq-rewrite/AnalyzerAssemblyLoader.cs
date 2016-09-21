@@ -27,8 +27,9 @@ namespace Microsoft.CodeAnalysis
 
         public void AddDependencyLocation(string fullPath)
         {
-            CompilerPathUtilities.RequireAbsolutePath(fullPath, nameof(fullPath));
-            string simpleName = PathUtilities.GetFileName(fullPath, includeExtension: false);
+            if (!ReflPathUtilities.IsAbsolute(fullPath)) throw new ArgumentException();
+            
+            string simpleName = ReflPathUtilities.GetFileName(fullPath, false);
 
             lock (_guard)
             {
@@ -46,7 +47,8 @@ namespace Microsoft.CodeAnalysis
 
         public Assembly LoadFromPath(string fullPath)
         {
-            CompilerPathUtilities.RequireAbsolutePath(fullPath, nameof(fullPath));
+            if (!ReflPathUtilities.IsAbsolute(fullPath))
+                throw new ArgumentException();
             return LoadFromPathUnchecked(fullPath);
         }
 
@@ -59,7 +61,7 @@ namespace Microsoft.CodeAnalysis
 
         private Assembly LoadFromPathUncheckedCore(string fullPath, AssemblyIdentity identity = null)
         {
-            Debug.Assert(PathUtilities.IsAbsolute(fullPath));
+            Debug.Assert(ReflPathUtilities.IsAbsolute(fullPath));
 
             // Check if we have already loaded an assembly with the same identity or from the given path.
             Assembly loadedAssembly = null;
@@ -92,7 +94,7 @@ namespace Microsoft.CodeAnalysis
 
         private Assembly AddToCache(Assembly assembly, string fullPath, AssemblyIdentity identity)
         {
-            Debug.Assert(PathUtilities.IsAbsolute(fullPath));
+            Debug.Assert(ReflPathUtilities.IsAbsolute(fullPath));
             Debug.Assert(assembly != null);
 
             identity = AddToCache(fullPath, identity ?? AssemblyIdentity.FromAssemblyDefinition(assembly));
@@ -122,7 +124,7 @@ namespace Microsoft.CodeAnalysis
 
         private AssemblyIdentity GetOrAddAssemblyIdentity(string fullPath)
         {
-            Debug.Assert(PathUtilities.IsAbsolute(fullPath));
+            Debug.Assert(ReflPathUtilities.IsAbsolute(fullPath));
 
             lock (_guard)
             {

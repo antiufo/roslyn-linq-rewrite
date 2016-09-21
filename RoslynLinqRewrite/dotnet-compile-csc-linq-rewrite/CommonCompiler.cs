@@ -28,6 +28,7 @@ using AnalyzerManager = System.Object;
 using AnalyzerDriver = System.Object;
 using Microsoft.CodeAnalysis.CommandLine;
 using Shaman.Roslyn.LinqRewrite;
+using System.Collections;
 
 namespace Microsoft.CodeAnalysis
 {
@@ -55,7 +56,7 @@ namespace Microsoft.CodeAnalysis
         protected abstract uint GetSqmAppID();
         protected abstract bool TryGetCompilerDiagnosticCode(string diagnosticId, out uint code);
         protected abstract void CompilerSpecificSqm(IVsSqmMulti sqm, uint sqmSession);
-        protected abstract ImmutableArray<DiagnosticAnalyzer> ResolveAnalyzersFromArguments(object diagnostics, CommonMessageProvider messageProvider, TouchedFileLogger touchedFiles);
+        protected abstract ImmutableArray<DiagnosticAnalyzer> ResolveAnalyzersAndGeneratorsFromArguments(object diagnostics, CommonMessageProvider messageProvider, TouchedFileLogger touchedFiles);
 
         public CommonCompiler(CommandLineParser parser, string responseFile, string[] args, string clientDirectory, string baseDirectory, string sdkDirectoryOpt, string additionalReferenceDirectories, IAnalyzerAssemblyLoader analyzerLoader)
         {
@@ -84,9 +85,7 @@ namespace Microsoft.CodeAnalysis
         {
             if (_clientDirectory != null)
             {
-                var name = $"{typeof(CommonCompiler).GetTypeInfo().Assembly.GetName().Name}.dll";
-                var filePath = Path.Combine(_clientDirectory, name);
-                return Compatibility.GetFileVersion(filePath);
+                return FileVersionInfo.GetVersionInfo(Refl.Assembly_Common.Location).FileVersion;
             }
 
             return "";
@@ -373,7 +372,7 @@ namespace Microsoft.CodeAnalysis
 
 
             var diagnostics = typeof(List<>).MakeGenericTypeFast(Refl.Type_DiagnosticInfo).InvokeFunction(".ctor");
-            var analyzers = ResolveAnalyzersFromArguments(diagnostics, MessageProvider, touchedFilesLogger);
+            var analyzers = ResolveAnalyzersAndGeneratorsFromArguments(diagnostics, MessageProvider, touchedFilesLogger);
             var additionalTextFiles = ResolveAdditionalFilesFromArguments(diagnostics, MessageProvider, touchedFilesLogger);
             if (ReportErrors((IEnumerable<DiagnosticInfo>)diagnostics, consoleOutput, errorLogger))
             {
@@ -427,10 +426,23 @@ namespace Microsoft.CodeAnalysis
                 foreach (var syntaxTree in compilation.SyntaxTrees)
                 {
                     var rewriter = new LinqRewriter(originalCompilation.GetSemanticModel(syntaxTree));
-                    var rewritten = rewriter.Visit(syntaxTree.GetRoot());
-                    compilation = compilation.ReplaceSyntaxTree(syntaxTree, rewritten.SyntaxTree);
-                    rewrittenLinqInvocations += rewriter.RewrittenLinqQueries;
-                    rewrittenMethods += rewriter.RewrittenMethods;
+                    var root = syntaxTree.GetRoot();
+                    var rewritten = rewriter.Visit(root);
+                    if (rewritten != root)
+                    {
+                        var rewrittenSyntaxTree = rewritten.SyntaxTree;
+                        if (syntaxTree.FilePath != null)
+                        {
+                            var originalName = syntaxTree.FilePath;
+                            rewrittenSyntaxTree = rewrittenSyntaxTree.WithFilePath(Path.Combine(Path.GetDirectoryName(originalName), Path.GetFileNameWithoutExtension(originalName) + "(Rewritten)" + ".cs"));
+                        }
+                        
+                        
+                        compilation = compilation.ReplaceSyntaxTree(syntaxTree, rewrittenSyntaxTree);
+
+                        rewrittenLinqInvocations += rewriter.RewrittenLinqQueries;
+                        rewrittenMethods += rewriter.RewrittenMethods;
+                    }
                 }
                 consoleOutput.WriteLine(string.Format("Rewritten {0} LINQ queries in {1} methods as procedural code.", rewrittenLinqInvocations, rewrittenMethods));
 
@@ -485,7 +497,7 @@ namespace Microsoft.CodeAnalysis
                 }
 
                 cancellationToken.ThrowIfCancellationRequested();
-
+                ImmutableArray<Diagnostic> emitDiagnostics;
                 IEnumerable<DiagnosticInfo> errors;
                 using (var win32ResourceStreamOpt = GetWin32Resources(Arguments, compilation, out errors))
                 using (xmlStreamOpt)
@@ -519,8 +531,9 @@ namespace Microsoft.CodeAnalysis
                     {
                         emitOptions = emitOptions.WithPdbFilePath(Path.GetFileName(emitOptions.PdbFilePath));
                     }
-                    
+
                     //var dummyCompiler = Refl.Type_Csc.InvokeFunction(".ctor", backup_responseFile, (object)null, backup_args, backup_analyzerLoader);
+                    
                     var constr = Refl.Type_Csc.GetConstructors(BindingFlags.Public|BindingFlags.NonPublic|BindingFlags.Instance).First(); 
                     var backup_buildPaths2 = Refl.Type_BuildPaths.InvokeFunction(".ctor", backup_buildPaths.ClientDirectory, backup_buildPaths.WorkingDirectory, backup_buildPaths.SdkDirectory);
                     var dummyCompiler = constr.Invoke(new object[]{ backup_responseFile, backup_buildPaths2, backup_args, backup_analyzerLoader});
@@ -541,20 +554,31 @@ namespace Microsoft.CodeAnalysis
                             Func<ImmutableArray<Diagnostic>> getHostDiagnostics,
                             CancellationToken cancellationToken)
                         */
-                        emitResult = ReflCompilation.Emit(
-                            compilation, 
-                            peStreamProvider,
-                            pdbStreamProviderOpt,
-                            (xmlStreamOpt != null) ? Refl.Type_SimpleEmitStreamProvider.InvokeFunction(".ctor", xmlStreamOpt) : null,
-                            (win32ResourceStreamOpt != null) ? Refl.Type_SimpleEmitStreamProvider.InvokeFunction(".ctor", win32ResourceStreamOpt) : null,
-                            Arguments.ManifestResources,
-                            emitOptions,
-                            /*debugEntryPoint:*/ null,
-                            /*testData*/ (object)null,
-                            /*getHostDiagnostics: */getAnalyzerDiagnostics,
-                            /*cancellationToken: */cancellationToken);
-
-                        if (emitResult.Success && touchedFilesLogger != null)
+                        var diagnosticBag = Refl.Type_DiagnosticBag.InvokeFunction(".ctor");
+                        Exception emitException = null;
+                        emitResult = null;
+                        try
+                        {
+                            var peStream = ReflEmitStreamProvider.CreateStream(peStreamProvider, diagnosticBag);
+                            var pdbStream = pdbStreamProviderOpt != null ? ReflEmitStreamProvider.CreateStream(pdbStreamProviderOpt, diagnosticBag) : null;
+                            emitResult = compilation.Emit(
+                                peStream,
+                                pdbStream,
+                                xmlStreamOpt,
+                                win32ResourceStreamOpt,
+                                Arguments.ManifestResources,
+                                emitOptions,
+                                null,
+                                cancellationToken);
+                        }
+                        catch(Exception ex)
+                        {
+                            emitException = ex;
+                        }
+                        emitDiagnostics = (ImmutableArray<Diagnostic>)diagnosticBag.GetType().GetMethods().Single(x => x.Name == "ToReadOnly" && !x.IsGenericMethod).Invoke(diagnosticBag, Array.Empty<object>());
+                        if (emitDiagnostics.Length == 0 && emitException != null) throw emitException;
+                        
+                        if (emitResult != null && emitResult.Success && touchedFilesLogger != null)
                         {
                             if (pdbStreamProviderOpt != null)
                             {
@@ -566,9 +590,8 @@ namespace Microsoft.CodeAnalysis
                     }
                 }
 
-                GenerateSqmData(Arguments.CompilationOptions, emitResult.Diagnostics);
 
-                if (ReportErrors(emitResult.Diagnostics, consoleOutput, errorLogger))
+                if (ReportErrors((emitResult != null ? emitResult.Diagnostics : Enumerable.Empty<Diagnostic>()).Union(emitDiagnostics), consoleOutput, errorLogger))
                 {
                     return Failed;
                 }

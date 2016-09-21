@@ -174,7 +174,11 @@ namespace Microsoft.DotNet.Tools.Compiler.Csc
                 // If we're not on Windows, full signing isn't supported, so we'll
                 // public sign, unless the public sign switch has explicitly been
                 // set to false
+#if DESKTOP
+                if (Environment.OSVersion.Platform != PlatformID.Win32NT &&
+#else
                 if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows) &&
+#endif
                     options.PublicSign == null)
                 {
                     commonArgs.Add("-publicsign");
@@ -204,7 +208,12 @@ namespace Microsoft.DotNet.Tools.Compiler.Csc
             string debugType;
             if (string.IsNullOrEmpty(options.DebugType))
             {
+#if DESKTOP
+                debugType = Environment.OSVersion.Platform == PlatformID.Win32NT ? "full" : "portable";
+#else
                 debugType = RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? "full" : "portable";
+#endif
+
             }
             else
             {

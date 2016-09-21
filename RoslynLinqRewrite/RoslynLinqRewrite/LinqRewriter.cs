@@ -1,9 +1,6 @@
 ﻿using Microsoft.CodeAnalysis;
-using Microsoft.CodeAnalysis.CodeActions;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
-using Microsoft.CodeAnalysis.Options;
-using Microsoft.CodeAnalysis.Rename;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -499,6 +496,8 @@ namespace Shaman.Roslyn.LinqRewrite
         private TypeParameterListSyntax currentMethodTypeParameters;
         private SyntaxList<TypeParameterConstraintClauseSyntax> currentMethodConstraintClauses;
 
+
+        
         public override SyntaxNode VisitClassDeclaration(ClassDeclarationSyntax node)
         {
             return VisitTypeDeclaration(node);

@@ -129,7 +129,7 @@ namespace Microsoft.CodeAnalysis.CommandLine
         {
             if (IsRunningOnWindows)
             {
-                return GetCommandLineWindows(args);
+                return GetCommandLineWindows(args).Where(x => x != "--csc");
             }
 
             return args;

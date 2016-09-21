@@ -15,6 +15,10 @@ using System.Threading;
 using Microsoft.CodeAnalysis.Diagnostics;
 using System.Globalization;
 
+
+// Disable field never assigned warning
+#pragma warning disable CS0649
+
 internal static class Refl
 {
     public static Assembly Assembly_Csc = typeof(Microsoft.CodeAnalysis.CSharp.CommandLine.Program).GetTypeInfo().Assembly;
@@ -23,16 +27,22 @@ internal static class Refl
     public static Type Type_Csc = Assembly_Csc.GetType("Microsoft.CodeAnalysis.CSharp.CommandLine.Csc");
     public static Type Type_BuildPaths = Assembly_Csc.GetType("Microsoft.CodeAnalysis.CommandLine.BuildPaths");
     public static Type Type_ErrorLogger = Assembly_Common.GetType("Microsoft.CodeAnalysis.ErrorLogger");
-    public static Type Type_AnalyzerDriver = Assembly_Common.GetType("Microsoft.CodeAnalysis.Diagnostics");
     public static Type Type_CompilerEmitStreamProvider = Assembly_Common.GetType("Microsoft.CodeAnalysis.CommonCompiler+CompilerEmitStreamProvider");
     public static Type Type_SimpleEmitStreamProvider = Assembly_Common.GetType("Microsoft.CodeAnalysis.Compilation+SimpleEmitStreamProvider");
+    public static Type Type_EmitStreamProvider = Assembly_Common.GetType("Microsoft.CodeAnalysis.Compilation+EmitStreamProvider");
     public static Type Type_AdditionalTextFile = Assembly_Common.GetType("Microsoft.CodeAnalysis.AdditionalTextFile");
     public static Type Type_FileUtilities = Assembly_Common.GetType("Roslyn.Utilities.FileUtilities");
 
     public static Type Type_MD5CryptoServiceProvider = Assembly_Common.GetType("Roslyn.Utilities.MD5CryptoServiceProvider");
-    public static Type Type_ErrorFacts = Assembly_Common.GetType("Microsoft.CodeAnalysis.CSharp.ErrorFacts");
+    public static Type Type_DiagnosticBag = Assembly_Common.GetType("Microsoft.CodeAnalysis.DiagnosticBag");
 
-    
+    public static Type Type_ErrorFacts = Assembly_Csharp.GetType("Microsoft.CodeAnalysis.CSharp.ErrorFacts");
+
+    public static Type Type_MessageId = Assembly_Csharp.GetType("Microsoft.CodeAnalysis.CSharp.MessageID");
+
+
+
+
     public static Type Type_CodeAnalysisResources = Assembly_Common.GetType("Microsoft.CodeAnalysis.CodeAnalysisResources");
     public static Type Type_Compilation = Assembly_Common.GetType("Microsoft.CodeAnalysis.Compilation");
 
@@ -45,6 +55,15 @@ internal static class ReflCSharpCommandLineArguments
     static ReflCSharpCommandLineArguments()
     {
         ReflectionHelper.InitializeWrapper(typeof(ReflCSharpCommandLineArguments), typeof(CSharpCommandLineArguments));
+    }
+}
+
+internal static class ReflEmitStreamProvider
+{
+    public static Func<object, object, Stream> CreateStream;
+    static ReflEmitStreamProvider()
+    {
+        ReflectionHelper.InitializeWrapper(typeof(ReflEmitStreamProvider), Refl.Type_EmitStreamProvider);
     }
 }
 
@@ -142,7 +161,7 @@ internal static class ReflRelativePathResolver
 internal static class ReflDiagnosticInfo
 {
     public static Func<object, int, object[], object> ctor;
-    public static Func<object, IFormatProvider, string> ToString;
+    public new static Func<object, IFormatProvider, string> ToString;
     static ReflDiagnosticInfo()
     {
         ReflectionHelper.InitializeWrapper(typeof(ReflDiagnosticInfo), Refl.Assembly_Common, "Microsoft.CodeAnalysis.DiagnosticInfo");
@@ -177,8 +196,6 @@ internal static class ReflCompilation
                             IEnumerable<ResourceDescription>,//manifestResources,
                             EmitOptions,//options,
                             IMethodSymbol,//debugEntryPoint,
-                            object,// testData,
-                            Func<ImmutableArray<Diagnostic>>,// getHostDiagnostics,
                             CancellationToken, //cancellationToken)
 
                             EmitResult
@@ -187,7 +204,7 @@ internal static class ReflCompilation
     {
         var e = typeof(ReflCompilation).GetField("Emit", BindingFlags.Public | BindingFlags.Static);
         var m = Refl.Type_Compilation.GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
-            .Single(x=>x.Name == "Emit" && x.GetParameters().Length == 10 && x.GetParameters()[0].ParameterType != typeof(Stream));
+            .Single(x=>x.Name == "Emit" && x.GetParameters().Length == 9);
         
         e.SetValue(null, ReflectionHelper.GetWrapper(m, e.FieldType));
     }
@@ -281,5 +298,5 @@ internal static class ReflAnalyzerDriver
     }
 }
 
-
+#pragma warning restore CS0649
 

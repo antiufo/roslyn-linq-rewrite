@@ -5,6 +5,8 @@ VisualStudioVersion = 15.0.25618.0
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RoslynLinqRewrite", "RoslynLinqRewrite\RoslynLinqRewrite.csproj", "{598C85B2-A90C-4637-9F29-6DFEBFD6F638}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ExampleLib.Msbuild", "ExampleLib.Msbuild\ExampleLib.Msbuild.csproj", "{14B0A253-ED29-450B-83D1-FFEE8431F282}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -15,6 +17,10 @@ Global
 		{598C85B2-A90C-4637-9F29-6DFEBFD6F638}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{598C85B2-A90C-4637-9F29-6DFEBFD6F638}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{598C85B2-A90C-4637-9F29-6DFEBFD6F638}.Release|Any CPU.Build.0 = Release|Any CPU
+		{14B0A253-ED29-450B-83D1-FFEE8431F282}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{14B0A253-ED29-450B-83D1-FFEE8431F282}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{14B0A253-ED29-450B-83D1-FFEE8431F282}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{14B0A253-ED29-450B-83D1-FFEE8431F282}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

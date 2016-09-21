@@ -12,7 +12,11 @@ namespace Microsoft.CodeAnalysis.CSharp.CommandLine
         
         public static int MainInternal(string[] args)
         {
+#if DESKTOP
+            return DesktopBuildClient.Run(args, Array.Empty<string>(), RequestLanguage.CSharpCompile, new CompileFunc(Csc.Run), new DesktopAnalyzerAssemblyLoader());
+#else
             return CoreClrBuildClient.Run(args, RequestLanguage.CSharpCompile, new CompileFunc(Csc.Run));
+#endif
         }
 
     }
