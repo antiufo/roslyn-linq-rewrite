@@ -35,7 +35,7 @@ private int Method1_ProceduralLinq1(int[] _linqitems, int q)
 ```
 **Allocations**: input array.
 
-*Note: the optimizing compiler has generated code using arrays, because the type was known at compile time. When this is not the case, the generated code will instead use a `foreach` and `IEnumerable<>`.*
+*Note: in this example, the optimizing compiler has generated code using arrays, because the type was known at compile time. When this is not the case, the generated code will instead use a `foreach` and `IEnumerable<>`.*
 *Non-optimizable call chains and `IQueryable<>` are left intact.*
 ## Supported LINQ methods
 * `Select`, `Where`, `Reverse`, `Cast`, `OfType`
