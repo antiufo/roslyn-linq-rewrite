@@ -34,6 +34,9 @@ private int Method1_ProceduralLinq1(int[] _linqitems, int q)
 }
 ```
 **Allocations**: input array.
+
+*Note: the optimizing compiler has generated code using arrays, because the type was known at compile time. When this is not the case, the generated code will instead use a `foreach` and `IEnumerable<>`.*
+*Non-optimizable call chains and `IQueryable<>` are left intact.*
 ## Supported LINQ methods
 * `Select`, `Where`, `Reverse`, `Cast`, `OfType`
 * `First`, `FirstOrDefault`, `Single`, `SingleOrDefault`, `Last`, `LastOrDefault`
@@ -42,7 +45,13 @@ private int Method1_ProceduralLinq1(int[] _linqitems, int q)
 * `ElementAt`, `ElementAtOrDefault`
 * `Contains`, `ForEach`
 
-## Usage
+## Usage (.sln/.csproj)
+* Download the [latest binaries](https://github.com/antiufo/roslyn-linq-rewrite/releases)
+* `roslyn-linq-rewrite <path-to-sln-or-csproj> [--release]`
+
+Note: you can more deeply integrate the optimizing compiler with MSBuild by setting `CscToolPath` to the roslyn-linq-rewrite directory.
+
+## Usage (project.json)
 * Add the following to your `project.json`:
 ```json
     "tools": {
@@ -70,10 +79,8 @@ namespace Shaman.Runtime
 }
 ```
 
-## Development
-* dotnet-compile-csc-linq-rewrite, the entrypoint, is available at [antiufo/cli (csc-linq-rewrite branch)](https://github.com/antiufo/cli/tree/csc-linq-rewrite/src/dotnet/commands/dotnet-compile-csc-linq-rewrite)
-* Shaman.Roslyn.LinqRewrite, the rewriting library, is available in the current repository.
-* [LINQ test results](https://github.com/antiufo/linqtests/blob/master/tests/Shaman.Roslyn.LinqRewrite.Tests/Results_diff.diff) (and [code](https://github.com/antiufo/linqtests/blob/master/tests/Shaman.Roslyn.LinqRewrite.Tests/))
+## Tests
+Here's a [diff](https://github.com/antiufo/linqtests/blob/master/tests/Shaman.Roslyn.LinqRewrite.Tests/Results_diff.diff) (and its [code](https://github.com/antiufo/linqtests/blob/master/tests/Shaman.Roslyn.LinqRewrite.Tests/)) between the ordinary LINQ tests and the version compiled with roslyn-linq-rewrite. The only difference seems to be related about a `Min`/`Max` with `NaN` values, I'm planning to fix it soon.
 
 ## Shaman.FastLinq
 To further reduce allocations, install `Shaman.FastLinq` or `Shaman.FastLinq.Sources`. These packages include LINQ methods specific for `T[]` and `List<>` (not all method calls are optimized by LINQ rewrite, like individual, non-chained `.First()` or `.Last()` calls).
