@@ -26,7 +26,8 @@ private int Method1_ProceduralLinq1(int[] _linqitems, int q)
     int num = 0;
     for (int i = 0; i < _linqitems.Length; i++)
     {
-        if (_linqitems[i] > q)
+        int num2 = _linqitems[i]; 
+        if (num2 > q)
             num += num2 + 3;
     }
     return num;
@@ -80,6 +81,6 @@ To further reduce allocations, install `Shaman.FastLinq` or `Shaman.FastLinq.Sou
 ## Comparison to LinqOptimizer
 * Code is optimized at build time (as opposed to run time)
 * Uses existing LINQ syntax, no need for `AsQueryExpr().Run()`
-* No allocations for Expression<> trees and enumerator boxing
+* No allocations for `Expression<>` trees and enumerator boxing
 * Parallel LINQ is not supported (i.e. left intact)
 * No support for F#
