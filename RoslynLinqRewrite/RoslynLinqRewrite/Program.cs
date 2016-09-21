@@ -45,32 +45,8 @@ namespace Shaman.Roslyn.LinqRewrite
         }
         private int MainInternal(string[] args)
         {
-            var exe = typeof(Program).Assembly.Location;
-            if (Path.GetFileNameWithoutExtension(exe).Equals("csc", StringComparison.OrdinalIgnoreCase))
-            {
-                var master = Path.Combine(Path.GetDirectoryName(exe), "roslyn-linq-rewrite.exe");
-                if (File.Exists(master) && !FilesLookEqual(exe, master))
-                {
-                    Console.WriteLine("csc.exe is out of sync with roslyn-linq-rewrite.exe. Synchronizing executables…");
-                    var tmp = exe + "." + Guid.NewGuid() + ".tmp";
-                    File.Move(exe, tmp);
-                    File.Copy(master, exe, true);
-                    File.Copy(master + ".config", exe + ".config", true);
-                    try
-                    {
-                        File.Delete(tmp);
-                    }
-                    catch
-                    {
-                    }
+            if (!MaybeSyncCsc()) return 1;
 
-
-
-                    Console.Error.WriteLine("Synchronized. Please restart the build process");
-                    return 1;
-
-                }
-            }
             var useCsc = !args.Contains("--show") && (args.Contains("--csc") || args.Any(x => x.StartsWith("@") || x.EndsWith(".cs") || x.StartsWith("--reference") || x.StartsWith("-r:") || x.StartsWith("-out:")));
             if (useCsc)
             {
@@ -140,7 +116,12 @@ namespace Shaman.Roslyn.LinqRewrite
                 var projectNamesIdx = Array.IndexOf(args, "--project");
                 var projectNames = projectNamesIdx != -1 ? args[projectNamesIdx + 1].Split(',') : null;
 
-                CompileSolution(file, projectNames, !args.Contains("--debug"), !args.Contains("--skip-generate-resources"));
+                var release = args.Contains("--release");
+                CompileSolution(file, projectNames, release, !args.Contains("--skip-generate-resources"), args.Contains("--internal-build-process"));
+                if (!release && !args.Contains("--debug"))
+                {
+                    Console.WriteLine("Note: for consistency with MSBuild, this tool compiles by default in debug mode. Consider specifying --release.");
+                }
                 return 0;
             }
             else if (ext == ".json")
@@ -163,6 +144,52 @@ namespace Shaman.Roslyn.LinqRewrite
                 return 1;
             }
 
+        }
+
+        private bool MaybeSyncCsc()
+        {
+            if (Debugger.IsAttached) return true;
+            // We need a copy of the program called "csc.exe". MSBuild only allows to specify the folder, not the full path of csc (CscToolPath).
+            var exe = typeof(Program).Assembly.Location;
+
+            var dir = Path.GetDirectoryName(exe);
+            var master = Path.Combine(dir, "roslyn-linq-rewrite.exe");
+            var csc = Path.Combine(dir, "csc.exe");
+            foreach (var file in Directory.EnumerateFiles(dir, "csc.*.tmp"))
+            {
+                try
+                {
+                    File.Delete(file);
+                }
+                catch
+                {
+                }
+            }
+            if (File.Exists(master) && !FilesLookEqual(csc, master))
+            {
+                Console.WriteLine("csc.exe is out of sync with roslyn-linq-rewrite.exe. Synchronizing executables (required by msbuild)…");
+                try
+                {
+                    File.Delete(csc);
+                }
+                catch (Exception)
+                {
+                    var tmp = csc + "." + Guid.NewGuid() + ".tmp";
+                    File.Move(csc, tmp);
+                }
+                File.Copy(master, csc, true);
+                File.Copy(master + ".config", csc + ".config", true);
+
+                if (Path.GetFileNameWithoutExtension(exe).Equals("csc", StringComparison.OrdinalIgnoreCase))
+                {
+                    Console.Error.WriteLine("Synchronized. Please restart the build process");
+                    return false;
+                }
+
+            }
+
+
+            return true;
         }
 
         private void ConfigureProjectJson(string file)
@@ -222,7 +249,7 @@ Options for .sln files:
   --project ProjectA            Determines which project(s) to compile (default: all).
 
 Options for .sln and .csproj files:
-  --debug/--release             Sets the project configuration (default: release)
+  --debug/--release             Sets the project configuration
   --skip-generate-resources     Skips .resources files generation (relies on existing ones)
 
 Options for csc.exe mode:
@@ -287,8 +314,25 @@ Options for translation preview mode:
             Console.ResetColor();
         }
 
-        private static void CompileSolution(string path, IReadOnlyList<string> projectNames, bool release, bool generateResources)
+        private static void CompileSolution(string path, IReadOnlyList<string> projectNames, bool release, bool generateResources, bool useInternalBuildProcess)
         {
+            if (!useInternalBuildProcess)
+            {
+                var a = new List<object>();
+                a.Add(path);
+                if (release)
+                    a.Add(new Shaman.Runtime.ProcessUtils.RawCommandLineArgument("/p:Configuration=Release"));
+
+                // MSBuild doesn't take CscToolPath into account when deciding whether to recompile. Rebuild always.
+                a.Add(new Shaman.Runtime.ProcessUtils.RawCommandLineArgument("/t:Rebuild"));
+
+                if (projectNames != null) throw new ArgumentException("--project is not allowed when --internal-build-process is not used.");
+                a.Add(new Shaman.Runtime.ProcessUtils.RawCommandLineArgument("/p:CscToolPath=\"" + Path.GetDirectoryName(typeof(Program).Assembly.Location) + "\""));
+
+                RunMsbuild(a);
+                return;
+            }
+
             var properties = new Dictionary<string, string>();
             if (release)
                 properties.Add("Configuration", "Release");
@@ -427,15 +471,7 @@ Options for translation preview mode:
                 if (release)
                     args.Add(new Shaman.Runtime.ProcessUtils.RawCommandLineArgument("/p:Configuration=Release"));
 
-
-                try
-                {
-                    ProcessUtils.RunPassThrough("msbuild", args.ToArray());
-                }
-                catch (Exception ex) when (!(ex is ProcessException))
-                {
-                    ProcessUtils.RunPassThrough("xbuild", args.ToArray());
-                }
+                RunMsbuild(args);
             }
             else
             {
@@ -457,6 +493,19 @@ Options for translation preview mode:
             Console.WriteLine("Compiled.");
 
             if (hasErrs) throw new ExitException(1);
+        }
+
+        private static void RunMsbuild(List<object> args)
+        {
+
+            try
+            {
+                ProcessUtils.RunPassThrough("msbuild", args.ToArray());
+            }
+            catch (Exception ex) when (!(ex is ProcessException))
+            {
+                ProcessUtils.RunPassThrough("xbuild", args.ToArray());
+            }
         }
 
         private static void CopyReferencedDllsToOutput(Project project)
