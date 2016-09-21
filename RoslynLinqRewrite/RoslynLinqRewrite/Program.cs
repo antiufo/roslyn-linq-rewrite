@@ -240,24 +240,21 @@ Options for translation preview mode:
 
         private void CompileExample(string path, bool devPath = true)
         {
-
-            var workspace = new AdhocWorkspace();
-            var proj = workspace.AddProject("LinqRewriteExample", "C#").WithMetadataReferences(
-                new[] {
+            var source = File.ReadAllText(devPath ? Path.Combine("../../Samples/", path) : path);
+            var isScript = Path.GetExtension(path).Equals(".csx");
+            var syntaxTree = CSharpSyntaxTree.ParseText(source, new CSharpParseOptions(kind: isScript ? SourceCodeKind.Script : SourceCodeKind.Regular));
+            var references = new[] {
                 MetadataReference.CreateFromFile(typeof(int).GetTypeInfo().Assembly.Location), // mscorlib
                 MetadataReference.CreateFromFile(typeof(Uri).GetTypeInfo().Assembly.Location), // System
                 MetadataReference.CreateFromFile(typeof(System.Linq.Enumerable).GetTypeInfo().Assembly.Location), // System.Core
-                }
-                ).WithCompilationOptions(new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
-            // proj = proj.AddDocument("FastLinqExtensions.cs", File.ReadAllText("../../../Shaman.FastLinq.Sources/FastLinqExtensions.cs")).Project;
-            var doc = proj.AddDocument("source.cs", File.ReadAllText(devPath ? Path.Combine("../../Samples/", path) : path));
+                };
+            var compilation = isScript
+                ? CSharpCompilation.CreateScriptCompilation("LinqRewriteExample", syntaxTree, references)
+                : CSharpCompilation.Create("LinqRewriteExample", new[] { syntaxTree }, references, new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
 
-            if (!workspace.TryApplyChanges(doc.Project.Solution)) throw new Exception();
-            proj = doc.Project;
-            var comp = proj.GetCompilationAsync().Result;
 
             var hasErrs = false;
-            foreach (var item in comp.GetDiagnostics())
+            foreach (var item in compilation.GetDiagnostics())
             {
                 if (item.Severity == DiagnosticSeverity.Error) hasErrs = true;
                 PrintDiagnostic(item);
@@ -265,13 +262,11 @@ Options for translation preview mode:
 
             if (hasErrs) return;
 
-            var syntaxTree = doc.GetSyntaxTreeAsync().Result;
-            var rewriter = new LinqRewriter(comp.GetSemanticModel(syntaxTree));
+            var rewriter = new LinqRewriter(compilation.GetSemanticModel(syntaxTree));
             var rewritten = rewriter.Visit(syntaxTree.GetRoot());
-            proj = doc.WithSyntaxRoot(rewritten).Project;
 
             hasErrs = false;
-            foreach (var item in proj.GetCompilationAsync().Result.GetDiagnostics())
+            foreach (var item in compilation.GetDiagnostics())
             {
                 if (item.Severity == DiagnosticSeverity.Error) hasErrs = true;
                 if (item.Severity == DiagnosticSeverity.Warning) continue;
