@@ -185,7 +185,7 @@ namespace Microsoft.CodeAnalysis.CSharp
 
             return tree;
         }
-
+        
         /// <summary>
         /// Given a compilation and a destination directory, determine three names:
         ///   1) The name with which the assembly should be output.
@@ -224,7 +224,10 @@ namespace Microsoft.CodeAnalysis.CSharp
 
                 if ((object)entryPoint != null)
                 {
-                    string entryPointFileName = ReflPathUtilities.GetFileName(entryPoint.Locations.First().SourceTree.FilePath.Replace("(Rewritten)", string.Empty), true);
+                    var syntaxTree = entryPoint.Locations.First().SourceTree;
+                    var location = syntaxTree.FilePath;
+                    if (location == null) OriginalPaths.TryGetValue(syntaxTree, out location);
+                    string entryPointFileName = ReflPathUtilities.GetFileName(location, true);
                     return Path.ChangeExtension(entryPointFileName, ".exe");
                 }
                 else

@@ -430,15 +430,8 @@ namespace Microsoft.CodeAnalysis
                     var rewritten = rewriter.Visit(root);
                     if (rewritten != root)
                     {
-                        var rewrittenSyntaxTree = rewritten.SyntaxTree;
-                        if (syntaxTree.FilePath != null)
-                        {
-                            var originalName = syntaxTree.FilePath;
-                            rewrittenSyntaxTree = rewrittenSyntaxTree.WithFilePath(Path.Combine(Path.GetDirectoryName(originalName), Path.GetFileNameWithoutExtension(originalName) + "(Rewritten)" + ".cs"));
-                        }
-                        
-                        
-                        compilation = compilation.ReplaceSyntaxTree(syntaxTree, rewrittenSyntaxTree);
+                        OriginalPaths[syntaxTree] = syntaxTree.FilePath;
+                        compilation = compilation.ReplaceSyntaxTree(syntaxTree, rewritten.SyntaxTree);
 
                         rewrittenLinqInvocations += rewriter.RewrittenLinqQueries;
                         rewrittenMethods += rewriter.RewrittenMethods;
@@ -676,6 +669,8 @@ namespace Microsoft.CodeAnalysis
 
             return Succeeded;
         }
+
+        protected Dictionary<SyntaxTree, string> OriginalPaths = new Dictionary<SyntaxTree, string>();
 
         protected virtual ImmutableArray<AdditionalTextFile> ResolveAdditionalFilesFromArguments(object diagnostics, CommonMessageProvider messageProvider, TouchedFileLogger touchedFilesLogger)
         {
