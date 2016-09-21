@@ -21,11 +21,38 @@ class Program
             }
             catch (System.Exception ex)
             {
+                foreach (var file in Directory.EnumerateFiles(path))
+                {
+                    try
+                    {
+                        File.Delete(file);
+                    }
+                    catch
+                    {
+                    }
+                }
+                foreach (var folder in Directory.EnumerateDirectories(path))
+                {
+                    TryDeleteDir(folder);
+                }
                 System.Console.WriteLine("Warning: cannot remove folder: " + ex.Message);
             }
         }
     }
-    static void Main(string[] args)
+
+    static int Main(string[] args)
+    {
+        try
+        {
+            return MainInternal(args);
+        }
+        catch (System.Exception ex)
+        {
+            System.Console.WriteLine(ex);
+            return 1;
+        }
+    }
+    static int MainInternal(string[] args)
     {
         if (args.Contains("--create-package"))
         {
@@ -67,10 +94,7 @@ class Program
             ProcessUtils.RunPassThroughFrom(toolPath, "dotnet", "build", "-c", "Release");
             File.Copy(Path.Combine(toolPath, "bin/Release/net46/dotnet-compile-csc-linq-rewrite.exe"), Path.Combine(outputDir, "roslyn-linq-rewrite.exe"), true);
             File.Copy(Path.Combine(repoDir, "RoslynLinqRewrite/RoslynLinqRewrite/bin/Release/roslyn-linq-rewrite.exe.config"), Path.Combine(outputDir, "roslyn-linq-rewrite.exe.config"), true);
-            File.Copy(Path.Combine(outputDir, "roslyn-linq-rewrite.exe"), Path.Combine(outputDir, "csc.exe"));
-            File.Copy(Path.Combine(outputDir, "roslyn-linq-rewrite.exe.config"), Path.Combine(outputDir, "csc.exe.config"));
-            
-            return;
+            return 0;
         }
 
         if (args.Contains("--install"))
@@ -90,14 +114,34 @@ class Program
             File.Copy(dependenciesPath, Path.Combine(folder, "project.json"), true);
             var binFolder = Path.Combine(folder, "bin");
 
+
+            TryDeleteDir(binFolder);
+            try
+            {
+                ProcessUtils.RunPassThroughFrom(folder, "dotnet", "restore");
+            }
+            catch (Exception ex) when (!(ex is ProcessException))
+            {
+                try
+                {
+                    ProcessUtils.RunPassThrough(folder, "dotnet", "--version");
+                }
+                catch
+                {
+                    System.Console.WriteLine("This tool requires the .NET CLI. You can install it from here: http://github.com/dotnet/cli/");
+                    return 1;
+                }
+                throw ex;
+            }
+
+            ProcessUtils.RunPassThroughFrom(folder, "dotnet", "publish");
+
             var nuget = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".nuget/packages");
 
             CopyTo(Path.Combine(nuget, "microsoft.diasymreader.native/1.5.0-beta1/runtimes/win/native/Microsoft.DiaSymReader.Native.amd64.dll"), folder);
             CopyTo(Path.Combine(nuget, "microsoft.diasymreader.native/1.5.0-beta1/runtimes/win/native/Microsoft.DiaSymReader.Native.x86.dll"), folder);
 
-            TryDeleteDir(binFolder);
-            ProcessUtils.RunPassThroughFrom(folder, "dotnet", "restore");
-            ProcessUtils.RunPassThroughFrom(folder, "dotnet", "publish");
+
             var files = Directory.EnumerateFiles(binFolder, "*.dll", SearchOption.AllDirectories);
             foreach (var file in files)
             {
@@ -137,10 +181,15 @@ class Program
                 }
             }
 
+            File.Copy(Path.Combine(folder, "roslyn-linq-rewrite.exe"), Path.Combine(folder, "csc.exe"));
+            File.Copy(Path.Combine(folder, "roslyn-linq-rewrite.exe.config"), Path.Combine(folder, "csc.exe.config"));
 
-            File.WriteAllText(Path.Combine(folder, "installed"), "1", Encoding.UTF8);
             File.Delete(Path.Combine(folder, "project.json"));
             File.Delete(Path.Combine(folder, "project.lock.json"));
+            File.WriteAllText(Path.Combine(folder, "installed"), "1", Encoding.UTF8);
+            return 0;
         }
+        System.Console.WriteLine("Invalid arguments.");
+        return 1;
     }
 }
