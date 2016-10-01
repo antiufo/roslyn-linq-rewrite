@@ -45,6 +45,10 @@ namespace Shaman.Roslyn.LinqRewrite
                 var p = new Program();
                 return p.MainInternal(args);
             }
+            catch (ExitException ex)
+            {
+                return ex.Code;
+            }
             catch (Exception ex)
             {
                 Console.WriteLine(ex);
@@ -468,8 +472,17 @@ Options for translation preview mode:
                     var syntaxTree = doc.GetSyntaxTreeAsync().Result;
 
                     var rewriter = new LinqRewriter(compilation.GetSemanticModel(syntaxTree));
-
-                    var rewritten = rewriter.Visit(syntaxTree.GetRoot());
+                    SyntaxNode rewritten;
+                    try
+                    {
+                        rewritten = rewriter.Visit(syntaxTree.GetRoot());
+                    }
+                    catch (Exception ex)
+                    {
+                        PrintDiagnostic(rewriter.CreateDiagnosticForException(ex, doc.FilePath));
+                        throw new ExitException(0);
+                    }
+                    
                     if (WriteFiles)
                     {
                         rewritten = rewritten.NormalizeWhitespace();

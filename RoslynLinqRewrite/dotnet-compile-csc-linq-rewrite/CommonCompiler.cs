@@ -427,7 +427,17 @@ namespace Microsoft.CodeAnalysis
                 {
                     var rewriter = new LinqRewriter(originalCompilation.GetSemanticModel(syntaxTree));
                     var root = syntaxTree.GetRoot();
-                    var rewritten = rewriter.Visit(root);
+                    SyntaxNode rewritten;
+                    try
+                    {
+                        rewritten = rewriter.Visit(root);
+                    }
+                    catch (Exception ex)
+                    {
+                        ReportErrors(new[] { rewriter.CreateDiagnosticForException(ex, syntaxTree.FilePath) }, consoleOutput, errorLogger);
+                        return Failed;
+                    }
+                    
                     if (rewritten != root)
                     {
                         OriginalPaths[syntaxTree] = syntaxTree.FilePath;

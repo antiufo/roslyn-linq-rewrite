@@ -638,6 +638,37 @@ namespace Shaman.Roslyn.LinqRewrite
         }
 
 
+        public Diagnostic CreateDiagnosticForException(Exception ex, string path)
+        {
+            var message = "roslyn-linq-rewrite exception while processing '" + path + "', method " + currentMethodName + ": " + ex.Message + " -- " + ex.StackTrace.Replace("\n", "");
+
+            return Diagnostic.Create("LQRW1001", "Compiler", new LiteralString(message), DiagnosticSeverity.Error, DiagnosticSeverity.Error, true, 0);
+        }
+
+        private class LiteralString : LocalizableString
+        {
+            private string str;
+            public LiteralString(string str)
+            {
+                this.str = str;
+            }
+            protected override bool AreEqual(object other)
+            {
+                var o = other as LiteralString;
+                if (o != null) return o.str == this.str;
+                return false;
+            }
+
+            protected override int GetHash()
+            {
+                return str.GetHashCode();
+            }
+
+            protected override string GetText(IFormatProvider formatProvider)
+            {
+                return str;
+            }
+        }
     }
 
 
