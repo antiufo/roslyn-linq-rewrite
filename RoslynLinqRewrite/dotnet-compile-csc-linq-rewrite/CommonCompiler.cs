@@ -436,8 +436,14 @@ namespace Microsoft.CodeAnalysis
                     {
                         ReportErrors(new[] { rewriter.CreateDiagnosticForException(ex, syntaxTree.FilePath) }, consoleOutput, errorLogger);
 
-                        Console.WriteLine(ex);
-                        Console.WriteLine(ex.StackTrace);
+                        var m = ex;
+                        while (m != null)
+                        {
+                            Console.WriteLine(m);
+                            Console.WriteLine(m.StackTrace);
+                            m = m.InnerException;
+                        }
+                        
 
                         return Failed;
                     }
@@ -562,7 +568,7 @@ namespace Microsoft.CodeAnalysis
                             CancellationToken cancellationToken)
                         */
                         var diagnosticBag = Refl.Type_DiagnosticBag.InvokeFunction(".ctor");
-                        Exception emitException = null;
+                        
                         emitResult = null;
                         try
                         {
@@ -578,12 +584,12 @@ namespace Microsoft.CodeAnalysis
                                 null,
                                 cancellationToken);
                         }
-                        catch(Exception ex)
+                        catch
                         {
-                            emitException = ex;
+                            emitDiagnostics = GetEmitDiagnostic(diagnosticBag);
+                            if(emitDiagnostics.Length == 0 ) throw;
                         }
-                        emitDiagnostics = (ImmutableArray<Diagnostic>)diagnosticBag.GetType().GetMethods().Single(x => x.Name == "ToReadOnly" && !x.IsGenericMethod).Invoke(diagnosticBag, Array.Empty<object>());
-                        if (emitDiagnostics.Length == 0 && emitException != null) throw emitException;
+                        emitDiagnostics = GetEmitDiagnostic(diagnosticBag);
                         
                         if (emitResult != null && emitResult.Success && touchedFilesLogger != null)
                         {
@@ -682,6 +688,11 @@ namespace Microsoft.CodeAnalysis
             }
 
             return Succeeded;
+        }
+
+        private ImmutableArray<Diagnostic> GetEmitDiagnostic(object diagnosticBag)
+        {
+            return (ImmutableArray<Diagnostic>)diagnosticBag.GetType().GetMethods().Single(x => x.Name == "ToReadOnly" && !x.IsGenericMethod).Invoke(diagnosticBag, Array.Empty<object>());
         }
 
         protected Dictionary<SyntaxTree, string> OriginalPaths = new Dictionary<SyntaxTree, string>();
