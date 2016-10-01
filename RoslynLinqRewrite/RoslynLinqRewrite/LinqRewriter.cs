@@ -72,7 +72,7 @@ namespace Shaman.Roslyn.LinqRewrite
                 currentMethodConstraintClauses = ((MethodDeclarationSyntax)owner).ConstraintClauses;
 
 
-                if (IsSupportedMethod(GetMethodFullName(node)))
+                if (IsSupportedMethod(node))
                 {
                     var chain = new List<LinqStep>();
                     chain.Add(new LinqStep(GetMethodFullName(node), node.ArgumentList.Arguments.Select(x => x.Expression).ToList(), node));
@@ -81,7 +81,7 @@ namespace Shaman.Roslyn.LinqRewrite
                     while (c.Expression is MemberAccessExpressionSyntax)
                     {
                         c = ((MemberAccessExpressionSyntax)c.Expression).Expression as InvocationExpressionSyntax;
-                        if (c != null && IsSupportedMethod(GetMethodFullName(c)))
+                        if (c != null && IsSupportedMethod(c))
                         {
                             chain.Add(new LinqStep(GetMethodFullName(c), c.ArgumentList.Arguments.Select(x => x.Expression).ToList(), c));
                             lastNode = c;
@@ -139,9 +139,6 @@ namespace Shaman.Roslyn.LinqRewrite
                         .Union(flowsOut)
                         .Where(x => (x as IParameterSymbol)?.IsThis != true)
                         .Select(x => CreateVariableCapture(x, flowsOut)) ?? Enumerable.Empty<VariableCapture>();
-
-
-
 
                     var collection = ((MemberAccessExpressionSyntax)lastNode.Expression).Expression;
 
@@ -241,6 +238,22 @@ namespace Shaman.Roslyn.LinqRewrite
             structSizeCache[type] = size;
             return size;
 
+        }
+
+        private bool IsSupportedMethod(InvocationExpressionSyntax invocation)
+        {
+            var name = GetMethodFullName(invocation);
+            if (!IsSupportedMethod(name)) return false;
+            if (invocation.ArgumentList.Arguments.Count != 0)
+            {
+                if (name != ElementAtMethod && name != ElementAtOrDefaultMethod && name != ContainsMethod)
+                {
+                    // Passing things like .Select(Method) is not supported.
+                    if (invocation.ArgumentList.Arguments.Any(x => !(x.Expression is AnonymousFunctionExpressionSyntax)))
+                        return false;
+                }
+            }
+            return true;
         }
 
         private bool IsSupportedMethod(string v)
@@ -346,20 +359,16 @@ namespace Shaman.Roslyn.LinqRewrite
             return GetSymbolType(x.Symbol);
         }
 
-        private string GetMethodFullName(CSharpSyntaxNode syntax)
+        private string GetMethodFullName(InvocationExpressionSyntax invocation)
         {
-            var invocation = syntax as InvocationExpressionSyntax;
-            if (invocation != null)
-            {
-                var n = (semantic.GetSymbolInfo(invocation.Expression).Symbol as IMethodSymbol)?.OriginalDefinition.ToDisplayString();
-                const string ienumerableOfTsource = "System.Collections.Generic.IEnumerable<TSource>";
-                n = n
-                    ?.Replace("System.Collections.Generic.List<TSource>", ienumerableOfTsource)
-                    .Replace("TSource[]", ienumerableOfTsource);
+            
+            var n = (semantic.GetSymbolInfo(invocation.Expression).Symbol as IMethodSymbol)?.OriginalDefinition.ToDisplayString();
+            const string ienumerableOfTsource = "System.Collections.Generic.IEnumerable<TSource>";
+            n = n
+                ?.Replace("System.Collections.Generic.List<TSource>", ienumerableOfTsource)
+                .Replace("TSource[]", ienumerableOfTsource);
                     
-                return n;
-            }
-            return null;
+            return n;
         }
 
         const string ItemsName = "_linqitems";
@@ -502,14 +511,14 @@ namespace Shaman.Roslyn.LinqRewrite
 
         private SyntaxNode TryVisitForEachStatement(ForEachStatementSyntax node)
         {
-            var collection = node.Expression;
-            if (collection is InvocationExpressionSyntax && IsSupportedMethod(GetMethodFullName(collection)))
+            var collection = node.Expression as InvocationExpressionSyntax;
+            if (collection != null && IsSupportedMethod(collection))
             {
                 var visitor = new CanRewrapForeachVisitor();
                 visitor.Visit(node.Statement);
                 if (!visitor.Fail)
                 {
-                    var k = TryCatchVisitInvocationExpression((InvocationExpressionSyntax)collection, node);
+                    var k = TryCatchVisitInvocationExpression(collection, node);
                     if (k != null) return SyntaxFactory.ExpressionStatement(k);
                 }
             }
