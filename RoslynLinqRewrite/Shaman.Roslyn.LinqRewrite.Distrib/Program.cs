@@ -181,8 +181,8 @@ class Program
                 }
             }
 
-            File.Copy(Path.Combine(folder, "roslyn-linq-rewrite.exe"), Path.Combine(folder, "csc.exe"));
-            File.Copy(Path.Combine(folder, "roslyn-linq-rewrite.exe.config"), Path.Combine(folder, "csc.exe.config"));
+            File.Copy(Path.Combine(folder, "roslyn-linq-rewrite.exe"), Path.Combine(folder, "csc.exe"), true);
+            File.Copy(Path.Combine(folder, "roslyn-linq-rewrite.exe.config"), Path.Combine(folder, "csc.exe.config"), true);
 
             File.Delete(Path.Combine(folder, "project.json"));
             File.Delete(Path.Combine(folder, "project.lock.json"));
