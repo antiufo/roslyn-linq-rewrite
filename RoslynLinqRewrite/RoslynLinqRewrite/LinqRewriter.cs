@@ -52,7 +52,7 @@ namespace Shaman.Roslyn.LinqRewrite
             }
             catch (Exception ex) when (ex is InvalidCastException || ex is NotSupportedException)
             {
-                methodsToAddToCurrentType = methodsToAddToCurrentType.Take(methodIdx).ToList();
+                methodsToAddToCurrentType.RemoveRange(methodIdx, methodsToAddToCurrentType.Count - methodIdx);
             }
             return null;
         }
