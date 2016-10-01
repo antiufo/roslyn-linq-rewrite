@@ -24,8 +24,6 @@ namespace Shaman.Roslyn.LinqRewrite
 {
     class Program
     {
-        private static bool NoRewrite;
-        private static bool WriteFiles;
         
 #if false
         private static IServiceProvider _hostServices;
