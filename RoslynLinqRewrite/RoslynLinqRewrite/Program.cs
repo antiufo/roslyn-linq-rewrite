@@ -436,52 +436,7 @@ Options for translation preview mode:
                 ProcessUtils.RunPassThrough("xbuild", argsArray);
             }
         }
-
-        private static void CopyReferencedDllsToOutput(Project project)
-        {
-            foreach (var reference in project.MetadataReferences)
-            {
-                var per = reference as PortableExecutableReference;
-                if (per != null)
-                {
-                    if (!per.FilePath.Replace("\\", "/").Contains("/Reference Assemblies/"))
-                    {
-                        MaybeCopyReference(per.FilePath, project);
-                    }
-                }
-            }
-            foreach (var reference in project.AllProjectReferences)
-            {
-                var proj = project.Solution.GetProject(reference.ProjectId);
-                if (proj != null)
-                {
-                    var path = GetObjPath(proj.OutputFilePath);
-                    if (!File.Exists(path)) path = proj.OutputFilePath;
-                    MaybeCopyReference(path, project);
-                }
-            }
-        }
-
-        private static string GetObjPath(string outputFilePath)
-        {
-            return outputFilePath
-                .Replace("/bin/", "/obj/")
-                .Replace("\\bin\\", "\\obj\\");
-        }
-
-        private static void MaybeCopyReference(string source, Project project)
-        {
-            var dest = Path.Combine(Path.GetDirectoryName(project.OutputFilePath), Path.GetFileName(source));
-            if (File.Exists(source) && !source.Equals(dest, StringComparison.OrdinalIgnoreCase))
-            {
-                if (File.Exists(dest))
-                {
-                    if (FilesLookEqual(source, dest)) return;
-                }
-                File.Copy(source, dest, true);
-            }
-        }
-
+        
         private static bool FilesLookEqual(string a, string b)
         {
             var sfi = new FileInfo(a);
