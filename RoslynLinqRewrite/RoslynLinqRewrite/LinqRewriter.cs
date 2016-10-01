@@ -665,6 +665,10 @@ namespace Shaman.Roslyn.LinqRewrite
 
         public Diagnostic CreateDiagnosticForException(Exception ex, string path)
         {
+            while (ex.InnerException != null)
+            {
+                ex = ex.InnerException;
+            }
             var message = "roslyn-linq-rewrite exception while processing '" + path + "', method " + currentMethodName + ": " + ex.Message + " -- " + ex.StackTrace.Replace("\n", "");
 
             return Diagnostic.Create("LQRW1001", "Compiler", new LiteralString(message), DiagnosticSeverity.Error, DiagnosticSeverity.Error, true, 0);
