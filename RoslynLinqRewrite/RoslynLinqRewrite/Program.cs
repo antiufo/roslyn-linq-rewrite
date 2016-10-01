@@ -61,6 +61,27 @@ namespace Shaman.Roslyn.LinqRewrite
             var useCsc = !args.Contains("--show") && (args.Contains("--csc") || args.Any(x => x.StartsWith("@") || x.EndsWith(".cs") || x.StartsWith("--reference") || x.StartsWith("-r:") || x.StartsWith("-out:")));
             if (useCsc)
             {
+                var saveCmdline = Environment.GetEnvironmentVariable("ROSLYN_LINQ_REWRITE_DUMP_CSC_CMDLINE");
+                if (!string.IsNullOrEmpty(saveCmdline) && saveCmdline != "0")
+                {
+                    // This exe works in this way:
+                    // 1. It launches msbuild with a custom CscToolPath
+                    // 2. Is launched again by msbuild and acts as a csc.exe compiler
+                    // In order to more easily debug the "inner" execution, you can set the above variable to 1 and then launch
+                    // roslyn-linq-rewrite <path-to-csproj>. Then, set the command line options in Visual Studio to
+                    // @C:\Path\To\roslyn-linq-rewrite-csc-command-line.rsp
+                    // Don't forget to also set the working directory to be the folder with the .csproj.
+                    // That file will be located in the project folder (not in the initial working directory)
+                    // You can now debug what happens when the program is being called by msbuild for the actual compilation.
+
+
+                    File.WriteAllText("roslyn-linq-rewrite-csc-command-line.txt", Environment.CommandLine);
+                    var at = args.FirstOrDefault(x => x.StartsWith("@"));
+                    if (at != null)
+                    {
+                        File.WriteAllText("roslyn-linq-rewrite-csc-command-line.rsp", File.ReadAllText(at.Substring(1)));
+                    }
+                }
                 args = args.Where(x => x != "--csc").ToArray();
                 if (args.Any(x => x.StartsWith("--temp-output:")))
                 {
