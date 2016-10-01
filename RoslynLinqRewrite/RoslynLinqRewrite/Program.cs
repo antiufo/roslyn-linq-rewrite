@@ -426,6 +426,16 @@ Options for translation preview mode:
                         ProcessUtils.RunPassThrough(path, argsArray);
                         return;
                     }
+
+                    if (path.Contains("\\amd64"))
+                    {
+                        path = path.Replace("\\amd64", string.Empty);
+                        if (File.Exists(path))
+                        {
+                            ProcessUtils.RunPassThrough(path, argsArray);
+                            return;
+                        }
+                    }
                 }
                 ProcessUtils.RunPassThrough("xbuild", argsArray);
             }
