@@ -435,6 +435,10 @@ namespace Microsoft.CodeAnalysis
                     catch (Exception ex)
                     {
                         ReportErrors(new[] { rewriter.CreateDiagnosticForException(ex, syntaxTree.FilePath) }, consoleOutput, errorLogger);
+
+                        Console.WriteLine(ex);
+                        Console.WriteLine(ex.StackTrace);
+
                         return Failed;
                     }
                     
