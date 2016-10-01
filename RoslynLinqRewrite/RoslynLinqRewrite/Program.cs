@@ -153,7 +153,7 @@ namespace Shaman.Roslyn.LinqRewrite
                 var projectNames = projectNamesIdx != -1 ? args[projectNamesIdx + 1].Split(',') : null;
 
                 var release = args.Contains("--release");
-                CompileSolution(file, projectNames, release, !args.Contains("--skip-generate-resources"), args.Contains("--internal-build-process"), args.Contains("--detailed"));
+                CompileSolution(file, projectNames, release, args.Contains("--detailed"));
                 if (!release && !args.Contains("--debug"))
                 {
                     Console.WriteLine("Note: for consistency with MSBuild, this tool compiles by default in debug mode. Consider specifying --release.");
@@ -317,7 +317,6 @@ Options for .sln files:
 
 Options for .sln and .csproj files:
   --debug/--release             Sets the project configuration
-  --skip-generate-resources     Skips .resources files generation (relies on existing ones)
 
 Options for csc.exe mode:
   --csc /?
@@ -381,200 +380,28 @@ Options for translation preview mode:
             Console.ResetColor();
         }
 
-        private static void CompileSolution(string path, IReadOnlyList<string> projectNames, bool release, bool generateResources, bool useInternalBuildProcess, bool detailed)
+        private static void CompileSolution(string path, IReadOnlyList<string> projectNames, bool release, bool detailed)
         {
-            if (!useInternalBuildProcess)
-            {
-                var a = new List<object>();
-                a.Add(path);
-                if (release)
-                    a.Add(new Shaman.Runtime.ProcessUtils.RawCommandLineArgument("/p:Configuration=Release"));
+            var a = new List<object>();
+            a.Add(path);
+            if (release)
+                a.Add(new Shaman.Runtime.ProcessUtils.RawCommandLineArgument("/p:Configuration=Release"));
 
-                // MSBuild doesn't take CscToolPath into account when deciding whether to recompile. Rebuild always.
-                a.Add(new Shaman.Runtime.ProcessUtils.RawCommandLineArgument("/t:Rebuild"));
+            // MSBuild doesn't take CscToolPath into account when deciding whether to recompile. Rebuild always.
+            a.Add(new Shaman.Runtime.ProcessUtils.RawCommandLineArgument("/t:Rebuild"));
 
-                if (detailed)
-                    a.Add(new Shaman.Runtime.ProcessUtils.RawCommandLineArgument("/verbosity:detailed"));
+            if (detailed)
+                a.Add(new Shaman.Runtime.ProcessUtils.RawCommandLineArgument("/verbosity:detailed"));
 
-                if (projectNames != null) throw new ArgumentException("--project is not allowed when --internal-build-process is not used.");
-                a.Add(new Shaman.Runtime.ProcessUtils.RawCommandLineArgument("/p:CscToolPath=\"" + Path.GetDirectoryName(typeof(Program).GetTypeInfo().Assembly.Location) + "\""));
+            if (projectNames != null) throw new ArgumentException("--project is not allowed when --internal-build-process is not used.");
+            a.Add(new Shaman.Runtime.ProcessUtils.RawCommandLineArgument("/p:CscToolPath=\"" + Path.GetDirectoryName(typeof(Program).GetTypeInfo().Assembly.Location) + "\""));
 
                 
-                RunMsbuild(a);
-                return;
-            }
-
-            var properties = new Dictionary<string, string>();
-            if (release)
-                properties.Add("Configuration", "Release");
-#if !DESKTOP
-            throw new NotSupportedException("Compiling CSPROJ files is not supported on CORECLR");
-#else
-            var workspace = Microsoft.CodeAnalysis.MSBuild.MSBuildWorkspace.Create(properties);
-
-            Solution solution = null;
-            if (".csproj".Equals(Path.GetExtension(path), StringComparison.OrdinalIgnoreCase))
-            {
-                Console.WriteLine("Building '" + path + "'");
-                CompileProject(workspace.OpenProjectAsync(path).Result, release, generateResources);
-            }
-            else
-            {
-                Console.WriteLine("Loading '" + path + "'");
-                solution = workspace.OpenSolutionAsync(path).Result;
-                var projsToCompile = projectNames != null ? solution.Projects.Where(x => projectNames.Contains(x.Name)).Select(x => x.Id).ToList() : null;
-
-                var missing = projectNames?.FirstOrDefault(x => !solution.Projects.Any(y => y.Name == x));
-                if (missing != null)
-                {
-                    throw new ArgumentException("Cannot find project '" + missing + "'.");
-                }
-
-                foreach (var projid in solution.GetProjectDependencyGraph().GetTopologicallySortedProjects())
-                {
-                    if (projsToCompile == null || projsToCompile.Contains(projid))
-                    {
-                        var proj = solution.GetProject(projid);
-                        Console.WriteLine("Building " + proj.Name);
-                        CompileProject(proj, release, generateResources);
-                    }
-                }
-            }
-
-#endif
+            RunMsbuild(a);
+              
 
         }
-
-        private static void CompileProject(Microsoft.CodeAnalysis.Project project, bool release, bool generateResources)
-        {
-            var compilation = project.GetCompilationAsync().Result;
-
-            var hasErrs = false;
-            foreach (var item in compilation.GetDiagnostics())
-            {
-                PrintDiagnostic(item);
-                if (item.Severity == DiagnosticSeverity.Error) hasErrs = true;
-            }
-
-            if (hasErrs) throw new ExitException(1);
-            var updatedProject = project;
-            if (!NoRewrite)
-            {
-
-                Console.WriteLine("Rewriting LINQ to procedural code...");
-
-
-                var rewrittenLinqInvocations = 0;
-                var rewrittenMethods = 0;
-
-                foreach (var doc in project.Documents)
-                {
-                    var syntaxTree = doc.GetSyntaxTreeAsync().Result;
-
-                    var rewriter = new LinqRewriter(compilation.GetSemanticModel(syntaxTree));
-                    SyntaxNode rewritten;
-                    try
-                    {
-                        rewritten = rewriter.Visit(syntaxTree.GetRoot());
-                    }
-                    catch (Exception ex)
-                    {
-                        PrintDiagnostic(rewriter.CreateDiagnosticForException(ex, doc.FilePath));
-                        throw new ExitException(0);
-                    }
-                    
-                    if (WriteFiles)
-                    {
-                        rewritten = rewritten.NormalizeWhitespace();
-                        var tostring = rewritten.ToFullString();
-                        if (syntaxTree.ToString() != tostring)
-                        {
-                            File.WriteAllText(doc.FilePath, tostring, Encoding.UTF8);
-                        }
-                    }
-
-                    rewrittenLinqInvocations += rewriter.RewrittenLinqQueries;
-                    rewrittenMethods += rewriter.RewrittenMethods;
-
-                    updatedProject = updatedProject.GetDocument(doc.Id).WithSyntaxRoot(rewritten).Project;
-
-                }
-                Console.WriteLine(string.Format("Rewritten {0} LINQ queries in {1} methods as procedural code.", rewrittenLinqInvocations, rewrittenMethods));
-                project = updatedProject;
-                compilation = project.GetCompilationAsync().Result;
-                hasErrs = false;
-                foreach (var item in compilation.GetDiagnostics())
-                {
-                    if (item.Severity == DiagnosticSeverity.Error)
-                    {
-                        PrintDiagnostic(item);
-                        hasErrs = true;
-                        if (item.Location != Location.None)
-                        {
-                            Console.ForegroundColor = ConsoleColor.White;
-                            //var lines = item.Location.GetLineSpan();
-                            var node = item.Location.SourceTree.GetRoot().FindNode(item.Location.SourceSpan);
-                            var k = node.AncestorsAndSelf().FirstOrDefault(x => x is MethodDeclarationSyntax);
-                            if (k != null)
-                            {
-                                Console.WriteLine(k.ToString());
-                            }
-                            Console.ResetColor();
-                        }
-                    }
-                }
-            }
-            var outputPath = project.OutputFilePath;
-            var objpath = GetObjPath(outputPath);
-            Directory.CreateDirectory(Path.GetDirectoryName(objpath));
-            Directory.CreateDirectory(Path.GetDirectoryName(outputPath));
-
-
-            var ns = XNamespace.Get("http://schemas.microsoft.com/developer/msbuild/2003");
-            var xml = XDocument.Load(project.FilePath);
-            var hasResources = xml
-                .DescendantNodes()
-                .OfType<XElement>()
-                .Where(x => x.Name == ns + "EmbeddedResource" || x.Name == ns + "Resource" || x.Name == ns + "CopyToOutputDirectory")
-                .Any();
-            if (hasResources && generateResources)
-            {
-                Console.WriteLine("Compiling resources");
-                foreach (var resource in Directory.GetFiles(Path.GetDirectoryName(objpath), "*.resources"))
-                {
-                    File.Delete(resource);
-                }
-
-                var args = new List<object>();
-                args.Add(project.FilePath);
-                args.Add("/verbosity:quiet");
-                if (release)
-                    args.Add(new Shaman.Runtime.ProcessUtils.RawCommandLineArgument("/p:Configuration=Release"));
-
-                RunMsbuild(args);
-            }
-            else
-            {
-                CopyReferencedDllsToOutput(project);
-            }
-            var resources = hasResources ? Directory.EnumerateFiles(Path.GetDirectoryName(objpath), "*.resources")
-                .Select(x =>
-                {
-                    return new ResourceDescription(Path.GetFileName(x), () => File.OpenRead(x), true);
-                }).ToList() : Enumerable.Empty<ResourceDescription>();
-
-            compilation.Emit(objpath, manifestResources: resources);
-
-
-            File.Copy(objpath, outputPath, true);
-
-
-
-            Console.WriteLine("Compiled.");
-
-            if (hasErrs) throw new ExitException(1);
-        }
-
+        
         private static void RunMsbuild(List<object> args)
         {
             var argsArray = args.ToArray();
