@@ -37,9 +37,25 @@ namespace Shaman.Roslyn.LinqRewrite
             return TryCatchVisitInvocationExpression(node, null) ?? base.VisitInvocationExpression(node);
         }
 
+        private bool insideConditionalExpression;
+        public override SyntaxNode VisitConditionalAccessExpression(ConditionalAccessExpressionSyntax node)
+        {
+            var old = insideConditionalExpression;
+            insideConditionalExpression = true;
+            try
+            {
+                return base.VisitConditionalAccessExpression(node);
+            }
+            finally
+            {
+                insideConditionalExpression = old;
+            }
+            
+        }
 
         private ExpressionSyntax TryCatchVisitInvocationExpression(InvocationExpressionSyntax node, ForEachStatementSyntax containingForEach)
         {
+            if (insideConditionalExpression) return null;
             var methodIdx = methodsToAddToCurrentType.Count;
             try
             {
@@ -71,7 +87,7 @@ namespace Shaman.Roslyn.LinqRewrite
                 currentMethodTypeParameters = ((MethodDeclarationSyntax)owner).TypeParameterList;
                 currentMethodConstraintClauses = ((MethodDeclarationSyntax)owner).ConstraintClauses;
 
-
+          
                 if (IsSupportedMethod(node))
                 {
                     var chain = new List<LinqStep>();
