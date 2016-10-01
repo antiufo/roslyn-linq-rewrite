@@ -420,17 +420,11 @@ Options for translation preview mode:
             {
                 foreach (var candidate in msbuildCandidates)
                 {
-                    try
+                    var path = Environment.ExpandEnvironmentVariables(candidate);
+                    if (File.Exists(path))
                     {
-                        var path = Environment.ExpandEnvironmentVariables(candidate);
-                        if (File.Exists(path))
-                        {
-                            ProcessUtils.RunPassThrough(path, argsArray);
-                            return;
-                        }
-                    }
-                    catch (Exception)
-                    {
+                        ProcessUtils.RunPassThrough(path, argsArray);
+                        return;
                     }
                 }
                 ProcessUtils.RunPassThrough("xbuild", argsArray);
