@@ -627,7 +627,7 @@ namespace Shaman.Roslyn.LinqRewrite
 
             if (method == SelectMethod)
             {
-                var lambda = (LambdaExpressionSyntax)step.Arguments[0];
+                var lambda = (AnonymousFunctionExpressionSyntax)step.Arguments[0];
 
                 var newname = "_linqitem" + ++lastId;
                 var lambdaType = (INamedTypeSymbol)semantic.GetTypeInfo(lambda).ConvertedType;
