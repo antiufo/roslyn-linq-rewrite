@@ -34,17 +34,18 @@ namespace Microsoft.CodeAnalysis.CommandLine
             var clientDir = AppDomain.CurrentDomain.BaseDirectory;
             var sdkDir = RuntimeEnvironment.GetRuntimeDirectory();
             var workingDir = Directory.GetCurrentDirectory();
-            var buildPaths = new BuildPaths(clientDir: clientDir, workingDir: workingDir, sdkDir: sdkDir);
+            string tempPath = Path.GetTempPath();
+            var buildPaths = new BuildPathsAlt(clientDir: clientDir, workingDir: workingDir, sdkDir: sdkDir, tempDir: tempPath);
             var originalArguments = BuildClient.GetCommandLineArgs(arguments).Concat(extraArguments).ToArray();
             return client.RunCompilation(originalArguments, buildPaths).ExitCode;
         }
 
-        protected override int RunLocalCompilation(string[] arguments, BuildPaths buildPaths, TextWriter textWriter)
+        protected override int RunLocalCompilation(string[] arguments, BuildPathsAlt buildPaths, TextWriter textWriter)
         {
             return _compileFunc(arguments, buildPaths, textWriter, _analyzerAssemblyLoader);
         }
         
-        protected override string GetSessionKey(BuildPaths buildPaths)
+        protected override string GetSessionKey(BuildPathsAlt buildPaths)
         {
             return string.Empty;
         }

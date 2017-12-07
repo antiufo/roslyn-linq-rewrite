@@ -125,7 +125,7 @@ namespace Microsoft.CodeAnalysis.CSharp
                 return null;
             }
 
-            var strongNameProvider = ReflLoggingStrongNameProvider.ctor(Arguments.KeyFileSearchPaths, touchedFilesLogger);
+            var strongNameProvider = ReflLoggingStrongNameProvider.ctor(Arguments.KeyFileSearchPaths, touchedFilesLogger, null);
 
             var compilation = CSharpCompilation.Create(
                 Arguments.CompilationName,
@@ -287,15 +287,15 @@ namespace Microsoft.CodeAnalysis.CSharp
 
         protected override ImmutableArray<DiagnosticAnalyzer> ResolveAnalyzersAndGeneratorsFromArguments(object diagnostics, CommonMessageProvider messageProvider, TouchedFileLogger touchedFiles)
         {
-            var func = Arguments.GetType().GetMethod("ResolveAnalyzersAndGeneratorsFromArguments", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
-            var arr = new object[6];
+            var func = Arguments.GetType().GetMethod("ResolveAnalyzersFromArguments", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+            var arr = new object[4];
             arr[0] = LanguageNames.CSharp;
             arr[1] = diagnostics;
             arr[2] = MessageProvider;
             // TODO What happened to parameter touchedFiles?
             arr[3] = AnalyzerLoader;
-            func.Invoke(Arguments, arr);
-            return (ImmutableArray<DiagnosticAnalyzer>)arr[4];
+            return (ImmutableArray<DiagnosticAnalyzer>)func.Invoke(Arguments, arr);
+            //return arr[4];
         }
     }
 }

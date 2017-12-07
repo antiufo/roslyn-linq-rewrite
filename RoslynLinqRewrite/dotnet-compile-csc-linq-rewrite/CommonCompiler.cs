@@ -17,7 +17,7 @@ using Microsoft.CodeAnalysis.Text;
 using Shaman.Runtime;
 using Shaman.Runtime.ReflectionExtensions;
 using Roslyn.Utilities;
-using Microsoft.VisualStudio.Shell.Interop;
+//using Microsoft.VisualStudio.Shell.Interop;
 using CommonMessageProvider = System.Object;
 using ErrorLogger2 = System.Object;
 using TouchedFileLogger = System.Object;
@@ -108,7 +108,8 @@ namespace Microsoft.CodeAnalysis
 
         internal virtual MetadataReferenceResolver GetCommandLineMetadataReferenceResolver(TouchedFileLogger loggerOpt)
         {
-            var pathResolver = ReflRelativePathResolver.ctor(Arguments.ReferencePaths, Arguments.BaseDirectory);
+            var type = Refl.Type_LoggingMetadataFileReferenceResolver.GetConstructors(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance).Single().GetParameters()[0].ParameterType;
+            var pathResolver = type.InvokeFunction(".ctor", Arguments.ReferencePaths, Arguments.BaseDirectory);
             return ReflLoggingMetadataFileReferenceResolver.ctor(pathResolver, GetMetadataProvider(), loggerOpt);
         }
 
@@ -168,7 +169,7 @@ namespace Microsoft.CodeAnalysis
                 using (var data = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite, bufferSize: 1, options: FileOptions.None))
                 {
                     normalizedFilePath = data.Name;
-                    return ReflEncodedStringText.Create(data, Arguments.Encoding, Arguments.ChecksumAlgorithm);
+                    return ReflEncodedStringText.Create(data, Arguments.Encoding, Arguments.ChecksumAlgorithm, false);
                 }
             }
             catch (Exception e)
@@ -336,7 +337,7 @@ namespace Microsoft.CodeAnalysis
         }
 
         internal string backup_responseFile; 
-        internal BuildPaths backup_buildPaths;
+        internal BuildPathsAlt backup_buildPaths;
         internal string[] backup_args;
         internal IAnalyzerAssemblyLoader backup_analyzerLoader;
 
@@ -450,23 +451,50 @@ namespace Microsoft.CodeAnalysis
                     
                     if (rewritten != root)
                     {
+
+                        var originalOptions = (CSharp.CSharpParseOptions)root.SyntaxTree.Options;
+                        var parseOptions = ((CSharp.CSharpParseOptions)syntaxTree.Options).WithLanguageVersion(originalOptions.LanguageVersion);
+                        var syntaxTree2 = syntaxTree.WithRootAndOptions(rewritten, parseOptions);
+
                         OriginalPaths[syntaxTree] = syntaxTree.FilePath;
-                        compilation = compilation.ReplaceSyntaxTree(syntaxTree, rewritten.SyntaxTree);
+                        
+                        //rewritten = rewritten.SyntaxTree.WithRootAndOptions
+                        compilation = compilation.ReplaceSyntaxTree(syntaxTree, syntaxTree2);
+                        
 
                         rewrittenLinqInvocations += rewriter.RewrittenLinqQueries;
                         rewrittenMethods += rewriter.RewrittenMethods;
                     }
                 }
-                consoleOutput.WriteLine(string.Format("Rewritten {0} LINQ queries in {1} methods as procedural code.", rewrittenLinqInvocations, rewrittenMethods));
+
+                var infoDescriptor = new DiagnosticDescriptor("REWRITE1001", "RoslynLinqRewrite statistics", "Rewritten {0} LINQ queries in {1} methods as procedural code.", "Compiler", DiagnosticSeverity.Info, true);
+                var info = Diagnostic.Create(infoDescriptor, Location.None, rewrittenLinqInvocations, rewrittenMethods);
+                
+                consoleOutput.WriteLine(DiagnosticFormatter.Format(info));
+
+                var rewriteto = Environment.GetEnvironmentVariable("ROSLYN_LINQ_REWRITE_OUT_STATISTICS_TO");
+                if (rewriteto != null)
+                {
+                    File.WriteAllText(rewriteto, string.Format("Rewritten {0} LINQ queries in {1} methods as procedural code.", rewrittenLinqInvocations, rewrittenMethods));
+                }
+
+                //consoleOutput.WriteLine(string.Format, rewrittenLinqInvocations, rewrittenMethods));
 
                 var k = compilation.GetDiagnostics().Where(x => x.Severity == DiagnosticSeverity.Error).ToList();
                 if (k.Count != 0)
                 {
                     foreach (var err in k)
                     {
-                        System.Console.WriteLine("Could not compile rewritten method. Consider applying a [Shaman.Runtime.NoLinqRewrite] attribute."); 
+
+                        var errordescr = new DiagnosticDescriptor("REWRITE1002", "Could not compile rewritten method", "Could not compile rewritten method. Consider applying a [Shaman.Runtime.NoLinqRewrite] attribute. File: {0}. Code: {1}", "Compiler", DiagnosticSeverity.Error, true);
                         var m = err.Location.SourceTree.GetRoot().FindNode(err.Location.SourceSpan);
-                        System.Console.WriteLine(err.Location.SourceTree.FilePath);
+                        var err2 = Diagnostic.Create(infoDescriptor, err.Location, err.Location.SourceTree.FilePath, m.ToString());
+
+                        consoleOutput.WriteLine(DiagnosticFormatter.Format(info));
+
+                        //System.Console.WriteLine("Could not compile rewritten method. Consider applying a [Shaman.Runtime.NoLinqRewrite] attribute."); 
+                        
+                        //System.Console.WriteLine(err.Location.SourceTree.FilePath);
                         //var z = m.FirstAncestorOrSelf<CSharp.Syntax.BaseMethodDeclarationSyntax>(x => x.Kind() == CSharp.SyntaxKind.MethodDeclaration);
                         //compilation.GetSemanticModel().GetEnclosingSymbol(err.Location.SourceSpan.Start)
 
@@ -548,61 +576,63 @@ namespace Microsoft.CodeAnalysis
                     //var dummyCompiler = Refl.Type_Csc.InvokeFunction(".ctor", backup_responseFile, (object)null, backup_args, backup_analyzerLoader);
                     
                     var constr = Refl.Type_Csc.GetConstructors(BindingFlags.Public|BindingFlags.NonPublic|BindingFlags.Instance).First(); 
-                    var backup_buildPaths2 = Refl.Type_BuildPaths.InvokeFunction(".ctor", backup_buildPaths.ClientDirectory, backup_buildPaths.WorkingDirectory, backup_buildPaths.SdkDirectory);
+                    var backup_buildPaths2 = Refl.Type_BuildPaths.InvokeFunction(".ctor", backup_buildPaths.ClientDirectory, backup_buildPaths.WorkingDirectory, backup_buildPaths.SdkDirectory, backup_buildPaths.TempDirectory);
                     var dummyCompiler = constr.Invoke(new object[]{ backup_responseFile, backup_buildPaths2, backup_args, backup_analyzerLoader});
                     //var dummyCompiler = Activator.CreateInstance(Refl.Type_Csc, BindingFlags.Public|BindingFlags.NonPublic|BindingFlags.CreateInstance|BindingFlags.Instance, null, new object[]{ backup_responseFile, (object)null, backup_args, backup_analyzerLoader}, null);
-                    using (var peStreamProvider = (IDisposable)Refl.Type_CompilerEmitStreamProvider.InvokeFunction(".ctor", dummyCompiler, finalPeFilePath))
-                    using (var pdbStreamProviderOpt = Arguments.EmitPdb ? (IDisposable)Refl.Type_CompilerEmitStreamProvider.InvokeFunction(".ctor", dummyCompiler, finalPdbFilePath) : null)
+                    var peStreamProvider = Refl.Type_CompilerEmitStreamProvider.InvokeFunction(".ctor", dummyCompiler, finalPeFilePath);
+                    var pdbStreamProviderOpt = Arguments.EmitPdb ? Refl.Type_CompilerEmitStreamProvider.InvokeFunction(".ctor", dummyCompiler, finalPdbFilePath) : null;
+                    
+                    /*
+                    internal EmitResult Emit(
+                        Compilation.EmitStreamProvider peStreamProvider, 
+                        Compilation.EmitStreamProvider pdbStreamProvider, 
+                        Compilation.EmitStreamProvider xmlDocumentationStreamProvider,
+                        Compilation.EmitStreamProvider win32ResourcesStreamProvider,
+                        IEnumerable<ResourceDescription> manifestResources,
+                        EmitOptions options,
+                        IMethodSymbol debugEntryPoint,
+                        CompilationTestData testData,
+                        Func<ImmutableArray<Diagnostic>> getHostDiagnostics,
+                        CancellationToken cancellationToken)
+                    */
+                    var diagnosticBag = Refl.Type_DiagnosticBag.InvokeFunction(".ctor");
+                        
+                    emitResult = null;
+                    try
                     {
-                        /*
-                        internal EmitResult Emit(
-                            Compilation.EmitStreamProvider peStreamProvider, 
-                            Compilation.EmitStreamProvider pdbStreamProvider, 
-                            Compilation.EmitStreamProvider xmlDocumentationStreamProvider,
-                            Compilation.EmitStreamProvider win32ResourcesStreamProvider,
-                            IEnumerable<ResourceDescription> manifestResources,
-                            EmitOptions options,
-                            IMethodSymbol debugEntryPoint,
-                            CompilationTestData testData,
-                            Func<ImmutableArray<Diagnostic>> getHostDiagnostics,
-                            CancellationToken cancellationToken)
-                        */
-                        var diagnosticBag = Refl.Type_DiagnosticBag.InvokeFunction(".ctor");
-                        
-                        emitResult = null;
-                        try
-                        {
-                            var peStream = ReflEmitStreamProvider.CreateStream(peStreamProvider, diagnosticBag);
-                            var pdbStream = pdbStreamProviderOpt != null ? ReflEmitStreamProvider.CreateStream(pdbStreamProviderOpt, diagnosticBag) : null;
-                            emitResult = compilation.Emit(
-                                peStream,
-                                pdbStream,
-                                xmlStreamOpt,
-                                win32ResourceStreamOpt,
-                                Arguments.ManifestResources,
-                                emitOptions,
-                                null,
-                                cancellationToken);
-                        }
-                        catch
-                        {
-                            emitDiagnostics = GetEmitDiagnostic(diagnosticBag);
-                            if(emitDiagnostics.Length == 0 ) throw;
-                        }
-                        emitDiagnostics = GetEmitDiagnostic(diagnosticBag);
-                        
-                        if (emitResult != null && emitResult.Success && touchedFilesLogger != null)
-                        {
-                            if (pdbStreamProviderOpt != null)
-                            {
-                                touchedFilesLogger.InvokeAction("AddWritten", finalPdbFilePath);
-                            }
-
-                            touchedFilesLogger.InvokeAction("AddWritten", finalPeFilePath);
-                        }
+                        var peStream = ReflEmitStreamProvider.CreateStream(peStreamProvider, diagnosticBag);
+                        var pdbStream = pdbStreamProviderOpt != null ? ReflEmitStreamProvider.CreateStream(pdbStreamProviderOpt, diagnosticBag) : null;
+                        emitResult = compilation.Emit(
+                            peStream,
+                            pdbStream,
+                            xmlStreamOpt,
+                            win32ResourceStreamOpt,
+                            Arguments.ManifestResources,
+                            emitOptions,
+                            null,
+                            cancellationToken);
                     }
+                    catch
+                    {
+                        emitDiagnostics = GetEmitDiagnostic(diagnosticBag);
+                        if(emitDiagnostics.Length == 0 ) throw;
+                    }
+                    emitDiagnostics = GetEmitDiagnostic(diagnosticBag);
+                        
+                    if (emitResult != null && emitResult.Success && touchedFilesLogger != null)
+                    {
+                        if (pdbStreamProviderOpt != null)
+                        {
+                            touchedFilesLogger.InvokeAction("AddWritten", finalPdbFilePath);
+                        }
+
+                        touchedFilesLogger.InvokeAction("AddWritten", finalPeFilePath);
+                    }
+                    peStreamProvider.InvokeAction("Close", diagnosticBag);
+                    pdbStreamProviderOpt?.InvokeAction("Close", diagnosticBag);
                 }
 
+                
 
                 if (ReportErrors((emitResult != null ? emitResult.Diagnostics : Enumerable.Empty<Diagnostic>()).Union(emitDiagnostics), consoleOutput, errorLogger))
                 {

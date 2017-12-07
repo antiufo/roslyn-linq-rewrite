@@ -5,7 +5,7 @@ using System.Runtime.InteropServices;
 // General Information about an assembly is controlled through the following 
 // set of attributes. Change these attribute values to modify the information
 // associated with an assembly.
-[assembly: AssemblyCopyright("Copyright © Andrea Martinelli 2016")]
+[assembly: AssemblyCopyright("Copyright © Andrea Martinelli 2017")]
 
 // Setting ComVisible to false makes the types in this assembly not visible 
 // to COM components.  If you need to access a type in this assembly from 
@@ -26,4 +26,9 @@ using System.Runtime.InteropServices;
 // by using the '*' as shown below:
 // [assembly: AssemblyVersion("1.0.*")]
 [assembly: AssemblyVersion("1.0.0.0")]
-[assembly: AssemblyFileVersion("1.0.0.0")]
+[assembly: AssemblyFileVersion("1.2.0.0")]
+[assembly: AssemblyTitle("RoslynLinqRewrite")]
+[assembly: AssemblyDescription("Rewrites LINQ calls as fast procedural code with minimal allocations.")]
+[assembly: AssemblyCompany("Andrea Martinelli")]
+[assembly: AssemblyProduct("RoslynLinqRewrite")]
+

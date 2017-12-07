@@ -32,11 +32,11 @@ namespace Microsoft.CodeAnalysis.CommandLine
             var client = new CoreClrBuildClient(language, compileFunc);
             var clientDir = AppContext.BaseDirectory;
             var workingDir = Directory.GetCurrentDirectory();
-            var buildPaths = new BuildPaths(clientDir: clientDir, workingDir: workingDir, sdkDir: null);
+            var buildPaths = new BuildPathsAlt(clientDir: clientDir, workingDir: workingDir, sdkDir: null, tempDir: null);
             return client.RunCompilation(arguments, buildPaths).ExitCode;
         }
 
-        protected override int RunLocalCompilation(string[] arguments, BuildPaths buildPaths, TextWriter textWriter)
+        protected override int RunLocalCompilation(string[] arguments, BuildPathsAlt buildPaths, TextWriter textWriter)
         {
             return _compileFunc(arguments, buildPaths, textWriter,
 #if DESKTOP
@@ -47,7 +47,7 @@ namespace Microsoft.CodeAnalysis.CommandLine
                 );
         }
 
-        protected override string GetSessionKey(BuildPaths buildPaths)
+        protected override string GetSessionKey(BuildPathsAlt buildPaths)
         {
             return string.Empty;
         }

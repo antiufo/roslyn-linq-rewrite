@@ -131,3 +131,4 @@ RoslynLinqRewrite/Shaman.Roslyn.LinqRewrite.Distrib/roslyn-linq-rewrite
 ExampleLib.Msbuild
 dotnet-compile-csc-linq-rewrite.nuget.props
 RoslynLinqRewrite/Shaman.Roslyn.LinqRewrite.Distrib/roslyn-linq-rewrite.zip
+RoslynLinqRewrite/roslyn-linq-rewrite.zip

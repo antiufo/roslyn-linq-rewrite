@@ -13,9 +13,9 @@ using System.Threading.Tasks;
 
 namespace Microsoft.CodeAnalysis.CommandLine
 {
-    internal delegate int CompileFunc(string[] arguments, BuildPaths buildPaths, TextWriter textWriter, IAnalyzerAssemblyLoader analyzerAssemblyLoader);
+    internal delegate int CompileFunc(string[] arguments, BuildPathsAlt buildPaths, TextWriter textWriter, IAnalyzerAssemblyLoader analyzerAssemblyLoader);
 
-    internal struct BuildPaths
+    internal struct BuildPathsAlt
     {
         /// <summary>
         /// The path which containts the compiler binaries and response files.
@@ -32,12 +32,14 @@ namespace Microsoft.CodeAnalysis.CommandLine
         /// CoreClr environment.
         /// </summary>
         internal string SdkDirectory { get; }
+        internal string TempDirectory { get; }
 
-        internal BuildPaths(string clientDir, string workingDir, string sdkDir)
+        internal BuildPathsAlt(string clientDir, string workingDir, string sdkDir, string tempDir)
         {
             ClientDirectory = clientDir;
             WorkingDirectory = workingDir;
             SdkDirectory = sdkDir;
+            TempDirectory = tempDir;
         }
     }
 
@@ -70,7 +72,7 @@ namespace Microsoft.CodeAnalysis.CommandLine
         /// to the console. If the compiler server fails, run the fallback
         /// compiler.
         /// </summary>
-        internal RunCompilationResult RunCompilation(IEnumerable<string> originalArguments, BuildPaths buildPaths, TextWriter textWriter = null)
+        internal RunCompilationResult RunCompilation(IEnumerable<string> originalArguments, BuildPathsAlt buildPaths, TextWriter textWriter = null)
         {
             textWriter = textWriter ?? Console.Out;
 
@@ -99,7 +101,7 @@ namespace Microsoft.CodeAnalysis.CommandLine
             return new RunCompilationResult(exitCode);
         }
 
-        public Task<RunCompilationResult> RunCompilationAsync(IEnumerable<string> originalArguments, BuildPaths buildPaths, TextWriter textWriter = null)
+        public Task<RunCompilationResult> RunCompilationAsync(IEnumerable<string> originalArguments, BuildPathsAlt buildPaths, TextWriter textWriter = null)
         {
             var tcs = new TaskCompletionSource<RunCompilationResult>();
             ThreadStart action = () =>
@@ -121,9 +123,9 @@ namespace Microsoft.CodeAnalysis.CommandLine
             return tcs.Task;
         }
 
-        protected abstract int RunLocalCompilation(string[] arguments, BuildPaths buildPaths, TextWriter textWriter);
+        protected abstract int RunLocalCompilation(string[] arguments, BuildPathsAlt buildPaths, TextWriter textWriter);
 
-        protected abstract string GetSessionKey(BuildPaths buildPaths);
+        protected abstract string GetSessionKey(BuildPathsAlt buildPaths);
 
         protected static IEnumerable<string> GetCommandLineArgs(IEnumerable<string> args)
         {

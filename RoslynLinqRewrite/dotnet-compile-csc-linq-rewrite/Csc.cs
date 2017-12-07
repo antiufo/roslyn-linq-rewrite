@@ -5,7 +5,7 @@ using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Text;
-using Microsoft.VisualStudio.Shell.Interop;
+//using Microsoft.VisualStudio.Shell.Interop;
 using Roslyn.Utilities;
 using Microsoft.CodeAnalysis.CommandLine;
 using IVsSqmMulti = System.Object;
@@ -14,7 +14,7 @@ namespace Microsoft.CodeAnalysis.CSharp.CommandLine
 {
     internal sealed class Csc : CSharpCompiler
     {
-        internal Csc(string responseFile, BuildPaths buildPaths, string[] args, IAnalyzerAssemblyLoader analyzerLoader)
+        internal Csc(string responseFile, BuildPathsAlt buildPaths, string[] args, IAnalyzerAssemblyLoader analyzerLoader)
             : base(CSharpCommandLineParser.Default, responseFile, args, buildPaths.ClientDirectory, buildPaths.WorkingDirectory, buildPaths.SdkDirectory, Environment.GetEnvironmentVariable("LIB"), analyzerLoader)
         {
             backup_analyzerLoader = analyzerLoader;
@@ -23,7 +23,7 @@ namespace Microsoft.CodeAnalysis.CSharp.CommandLine
             backup_responseFile = responseFile;
         }
 
-        internal static int Run(string[] args, BuildPaths buildPaths, TextWriter textWriter, IAnalyzerAssemblyLoader analyzerLoader)
+        internal static int Run(string[] args, BuildPathsAlt buildPaths, TextWriter textWriter, IAnalyzerAssemblyLoader analyzerLoader)
         {
             ReflFatalError.set_Handler(FailFast.OnFatalException);
 

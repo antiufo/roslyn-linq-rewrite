@@ -25,7 +25,7 @@ internal static class Refl
     public static Assembly Assembly_Common = typeof(Microsoft.CodeAnalysis.Compilation).GetTypeInfo().Assembly;
     public static Assembly Assembly_Csharp = typeof(Microsoft.CodeAnalysis.CSharpExtensions).GetTypeInfo().Assembly;
     public static Type Type_Csc = Assembly_Csc.GetType("Microsoft.CodeAnalysis.CSharp.CommandLine.Csc");
-    public static Type Type_BuildPaths = Assembly_Csc.GetType("Microsoft.CodeAnalysis.CommandLine.BuildPaths");
+    public static Type Type_BuildPaths = typeof(Microsoft.CodeAnalysis.AssemblyMetadata).Assembly.GetType("Microsoft.CodeAnalysis.BuildPaths");
     public static Type Type_ErrorLogger = Assembly_Common.GetType("Microsoft.CodeAnalysis.ErrorLogger");
     public static Type Type_CompilerEmitStreamProvider = Assembly_Common.GetType("Microsoft.CodeAnalysis.CommonCompiler+CompilerEmitStreamProvider");
     public static Type Type_SimpleEmitStreamProvider = Assembly_Common.GetType("Microsoft.CodeAnalysis.Compilation+SimpleEmitStreamProvider");
@@ -39,7 +39,7 @@ internal static class Refl
     public static Type Type_ErrorFacts = Assembly_Csharp.GetType("Microsoft.CodeAnalysis.CSharp.ErrorFacts");
 
     public static Type Type_MessageId = Assembly_Csharp.GetType("Microsoft.CodeAnalysis.CSharp.MessageID");
-
+    public static Type Type_LoggingMetadataFileReferenceResolver = Refl.Assembly_Common.GetType("Microsoft.CodeAnalysis.CommonCompiler+LoggingMetadataFileReferenceResolver");
 
 
 
@@ -149,15 +149,7 @@ internal static class ReflCommandLineArguments
 }
 
 
-internal static class ReflRelativePathResolver
-{
-    //public static Func<object, string, string, string> ResolvePath;
-    public static Func<ImmutableArray<string>, string, object> ctor;
-    static ReflRelativePathResolver()
-    {
-        ReflectionHelper.InitializeWrapper(typeof(ReflRelativePathResolver), Refl.Assembly_Common, "Microsoft.CodeAnalysis.RelativePathResolver");
-    }
-}
+
 internal static class ReflDiagnosticInfo
 {
     public static Func<object, int, object[], object> ctor;
@@ -172,13 +164,13 @@ internal static class ReflLoggingMetadataFileReferenceResolver
     public static Func<object, Func<string, MetadataReferenceProperties, PortableExecutableReference>, object, MetadataReferenceResolver> ctor;
     static ReflLoggingMetadataFileReferenceResolver()
     {
-        ReflectionHelper.InitializeWrapper(typeof(ReflLoggingMetadataFileReferenceResolver), Refl.Assembly_Common, "Microsoft.CodeAnalysis.CommonCompiler+LoggingMetadataFileReferenceResolver");
+        ReflectionHelper.InitializeWrapper(typeof(ReflLoggingMetadataFileReferenceResolver), Refl.Type_LoggingMetadataFileReferenceResolver);
     }
 }
 internal static class ReflEncodedStringText
 {
 
-    public static Func<Stream, Encoding, SourceHashAlgorithm, SourceText> Create;
+    public static Func<Stream, Encoding, SourceHashAlgorithm, bool, SourceText> Create;
     static ReflEncodedStringText()
     {
         ReflectionHelper.InitializeWrapper(typeof(ReflEncodedStringText), Refl.Assembly_Common, "Microsoft.CodeAnalysis.Text.EncodedStringText");
@@ -228,7 +220,7 @@ internal static class ReflLoggingSourceFileResolver
 }
 internal static class ReflLoggingStrongNameProvider
 {
-    public static Func<ImmutableArray<string>, object, DesktopStrongNameProvider> ctor;
+    public static Func<ImmutableArray<string>, object, string, DesktopStrongNameProvider> ctor;
     static ReflLoggingStrongNameProvider()
     {
         ReflectionHelper.InitializeWrapper(typeof(ReflLoggingStrongNameProvider), Refl.Assembly_Common, "Microsoft.CodeAnalysis.CommonCompiler+LoggingStrongNameProvider");

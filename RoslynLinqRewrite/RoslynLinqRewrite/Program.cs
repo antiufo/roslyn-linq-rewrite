@@ -22,7 +22,7 @@ using Microsoft.Dnx.Runtime.Common.CommandLine;
 
 namespace Shaman.Roslyn.LinqRewrite
 {
-    class Program
+    public class Program
     {
         
 #if false
@@ -55,12 +55,8 @@ namespace Shaman.Roslyn.LinqRewrite
         }
         private int MainInternal(string[] args)
         {
-#if DESKTOP
-            EnsureInstalled();
-            if (!MaybeSyncCsc()) return 1;
-#endif
 
-            var useCsc = !args.Contains("--show") && (args.Contains("--csc") || args.Any(x => x.StartsWith("@") || x.EndsWith(".cs") || x.StartsWith("--reference") || x.StartsWith("-r:") || x.StartsWith("-out:")));
+            var useCsc = Path.GetFileName(Assembly.GetEntryAssembly().Location).Equals("csc.exe", StringComparison.OrdinalIgnoreCase) || args.Contains("--csc");
             if (useCsc)
             {
                 var saveCmdline = Environment.GetEnvironmentVariable("ROSLYN_LINQ_REWRITE_DUMP_CSC_CMDLINE");
@@ -85,14 +81,7 @@ namespace Shaman.Roslyn.LinqRewrite
                     }
                 }
                 args = args.Where(x => x != "--csc").ToArray();
-                if (args.Any(x => x.StartsWith("--temp-output:")))
-                {
-                    return Microsoft.DotNet.Tools.Compiler.Csc.CompileCscLinqRewriteCommand.Run(args);
-                }
-                else
-                {
-                    return Microsoft.CodeAnalysis.CSharp.CommandLine.ProgramLinqRewrite.MainInternal(args);
-                }
+                return Microsoft.CodeAnalysis.CSharp.CommandLine.ProgramLinqRewrite.MainInternal(args);
             }
             if ((args.Contains("-h") || args.Contains("--help") || args.Contains("/?")))
             {
@@ -115,185 +104,45 @@ namespace Shaman.Roslyn.LinqRewrite
                 return 0;
             }
 
-            if (file == null || Directory.Exists(file))
-            {
-                var candidates = Directory.EnumerateFiles(file ?? Directory.GetCurrentDirectory())
-                    .Where(x => Path.GetFileName(x) == "project.json" || Path.GetExtension(x) == ".sln" || Path.GetExtension(x) == ".csproj")
-                    .ToList();
-                if (candidates.Count == 0)
-                {
-                    PrintUsage();
-                    return 1;
-                }
-                if (candidates.Count > 1)
-                {
-                    Console.WriteLine("Multiple projects found in " + (file != null ? "'" + file + "'." : "the current directory."));
-                    Console.WriteLine("Please specify a specific project file.");
-                    return 1;
-                }
-                file = candidates[0];
-            }
-            file = Path.GetFullPath(file);
-            if (!File.Exists(file))
-            {
-                Console.WriteLine("File does not exist: '" + file + "'");
-                return 1;
-            }
-            var ext = Path.GetExtension(file).ToLower();
-            if (ext == ".xproj")
-            {
-                Console.WriteLine("XPROJ files are not supported. Please target the corresponding project.json instead.");
-                return 1;
-            }
-            else if (ext == ".sln" || ext == ".csproj")
-            {
-                var projectNamesIdx = Array.IndexOf(args, "--project");
-                var projectNames = projectNamesIdx != -1 ? args[projectNamesIdx + 1].Split(',') : null;
+            
 
-                var release = args.Contains("--release");
-                CompileSolution(file, projectNames, release, args.Contains("--detailed"));
-                if (!release && !args.Contains("--debug"))
-                {
-                    Console.WriteLine("Note: for consistency with MSBuild, this tool compiles by default in debug mode. Consider specifying --release.");
-                }
-                return 0;
-            }
-            else if (ext == ".json")
+            var release = args.Contains("/p:Configuration=Release");
+
+
+            var a = new List<object>();
+      
+            // MSBuild doesn't take CscToolPath into account when deciding whether to recompile. Rebuild always.
+
+            if(!args.Any(x => x.StartsWith("/t:") || x.StartsWith("/target:")))
+                a.Add(new Shaman.Runtime.ProcessUtils.RawCommandLineArgument("/t:Rebuild"));
+
+            var infofile = Path.Combine(Path.GetTempPath(), Guid.NewGuid() + ".txt");
+            Environment.SetEnvironmentVariable("ROSLYN_LINQ_REWRITE_OUT_STATISTICS_TO", infofile);
+
+            a.Add(new Shaman.Runtime.ProcessUtils.RawCommandLineArgument("/p:CscToolPath=\"" + Path.GetDirectoryName(typeof(Program).GetTypeInfo().Assembly.Location) + "\""));
+
+
+            a.AddRange(args);
+            RunMsbuild(a);
+
+            Console.WriteLine();
+            if (File.Exists(infofile))
             {
-                if (args.Contains("--configure"))
-                {
-                    ConfigureProjectJson(file);
-                    return 0;
-                }
-                else
-                {
-                    Console.WriteLine("In order to build project.json projects, please specify the appropriate configuration in \"compilerName\" and \"tools\", and then use \"dotnet build\".");
-                    Console.WriteLine("Use roslyn-linq-rewrite <path-to-project-json> --configure to let the tool automatically perform this task for you.");
-                    return 1;
-                }
+                Console.WriteLine(File.ReadAllText(infofile));
+                File.Delete(infofile);
             }
-            else
+
+            if (!release)
             {
-                Console.WriteLine("Unsupported project type: " + ext);
-                return 1;
+                Console.WriteLine("Note: for consistency with MSBuild, this tool compiles by default in debug mode. Consider specifying /p:Configuration=Release.");
             }
+            return 0;
+            
+
 
         }
-#if DESKTOP
-        private void EnsureInstalled()
-        {
-            var dir = Path.GetDirectoryName(typeof(Program).GetTypeInfo().Assembly.Location);
-            if (!File.Exists(Path.Combine(dir, "installed")) && !dir.Contains("bin\\Debug") && !dir.Contains("bin\\Release") )
-            {
-                Console.WriteLine("Installing dependencies for first use…");
-                var init = Path.Combine(dir, "Shaman.Roslyn.LinqRewrite.Initialization.dll");
-                var exe = Path.Combine(dir, "Shaman.Roslyn.LinqRewrite.Initialization.exe");
-                File.Copy(init, exe, true);
-                var p = new ProcessStartInfo();
-                p.WorkingDirectory = dir;
-                p.UseShellExecute = false;
-                p.Arguments = "--install";
-                p.FileName = Path.Combine(dir, exe);
-                using (var pr = Process.Start(p))
-                {
-                    pr.WaitForExit();
-                    if (pr.ExitCode != 0)
-                        throw new Exception("An error occured.");
-                }
-                try
-                {
-                    File.Delete(exe);
-                }
-                catch
-                {
-                }
-            }
-        }
 
-        private bool MaybeSyncCsc()
-        {
-            if (Debugger.IsAttached) return true;
-            // We need a copy of the program called "csc.exe". MSBuild only allows to specify the folder, not the full path of csc (CscToolPath).
-            var exe = typeof(Program).GetTypeInfo().Assembly.Location;
-
-            var dir = Path.GetDirectoryName(exe);
-            var master = Path.Combine(dir, "roslyn-linq-rewrite.exe");
-            var csc = Path.Combine(dir, "csc.exe");
-            foreach (var file in Directory.EnumerateFiles(dir, "csc.*.tmp"))
-            {
-                try
-                {
-                    File.Delete(file);
-                }
-                catch
-                {
-                }
-            }
-            if (File.Exists(master) && !FilesLookEqual(csc, master))
-            {
-                Console.WriteLine("csc.exe is out of sync with roslyn-linq-rewrite.exe. Synchronizing executables (required by msbuild)…");
-                try
-                {
-                    File.Delete(csc);
-                }
-                catch (Exception)
-                {
-                    var tmp = csc + "." + Guid.NewGuid() + ".tmp";
-                    File.Move(csc, tmp);
-                }
-                File.Copy(master, csc, true);
-                File.Copy(master + ".config", csc + ".config", true);
-
-                if (Path.GetFileNameWithoutExtension(exe).Equals("csc", StringComparison.OrdinalIgnoreCase))
-                {
-                    Console.Error.WriteLine("Synchronized. Please restart the build process");
-                    return false;
-                }
-
-            }
-
-
-            return true;
-        }
-#endif
-        private void ConfigureProjectJson(string file)
-        {
-            var f = File.ReadAllText(file);
-            var json = JObject.Parse(f);
-
-            var tools = json["tools"];
-            if (tools == null)
-            {
-                tools = new JObject();
-                json["tools"] = tools;
-            }
-
-            var rewriteTool = new JObject();
-            var vers = typeof(Program).GetTypeInfo().Assembly.GetName().Version.ToString();
-            rewriteTool["version"] = vers != "1.0.0.0" ? vers : "1.0.1.11";
-            rewriteTool["imports"] = "portable-net45+win8+wp8+wpa81";
-            tools["dotnet-compile-csc-linq-rewrite"] = rewriteTool;
-
-            var buildOptions = json["buildOptions"];
-            if (buildOptions == null)
-            {
-                buildOptions = json["compilationOptions"];
-                if (buildOptions != null)
-                {
-                    json.Property("compilationOptions").Replace(new JProperty("buildOptions", buildOptions));
-                }
-                else
-                {
-                    buildOptions = new JObject();
-                    json["buildOptions"] = buildOptions;
-                }
-            }
-
-            buildOptions["compilerName"] = "csc-linq-rewrite";
-            File.WriteAllText(file, json.ToString(Newtonsoft.Json.Formatting.Indented), Encoding.UTF8);
-            Console.WriteLine("Updated '" + file + "'. You can now use dotnet restore && dotnet build.");
-        }
-
+   
         private void PrintUsage()
         {
             Console.WriteLine("roslyn-linq-rewrite " + typeof(Program).GetTypeInfo().Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion);
@@ -301,26 +150,13 @@ namespace Shaman.Roslyn.LinqRewrite
 @"github.com/antiufo/roslyn-linq-rewrite
 
 Usage:
-  roslyn-linq-rewrite <path-to-csproj> [options]
-  roslyn-linq-rewrite <path-to-sln> [options]
-  roslyn-linq-rewrite <path-to-project-json> --configure
-  roslyn-linq-rewrite <standard-csc-parameters>
+  roslyn-linq-rewrite <path-to-csproj> [msbuild-options]
+  roslyn-linq-rewrite <path-to-sln> [msbuild-options]
   roslyn-linq-rewrite --show <path-to-cs>
 
-Options for project.json:
-  --configure                   Configures project.json to use the roslyn-linq-rewrite compiler.
+If you prefer to call msbuild directly, use msbuild /t:Rebuild /p:CscToolPath=""" + Path.GetDirectoryName(typeof(Program).Assembly.Location) +@"""
+However, you won't see statistics about the rewritten methods.
 
-Options for .sln files:
-  --project ProjectA            Determines which project(s) to compile (default: all).
-
-Options for .sln and .csproj files:
-  --debug/--release             Sets the project configuration
-
-Options for csc.exe mode:
-  --csc /?
-
-Options for translation preview mode:
-  --show                        Translates and shows the produced code for a single .cs file
 ");
         }
 
@@ -378,32 +214,17 @@ Options for translation preview mode:
             Console.ResetColor();
         }
 
-        private static void CompileSolution(string path, IReadOnlyList<string> projectNames, bool release, bool detailed)
-        {
-            var a = new List<object>();
-            a.Add(path);
-            if (release)
-                a.Add(new Shaman.Runtime.ProcessUtils.RawCommandLineArgument("/p:Configuration=Release"));
-
-            // MSBuild doesn't take CscToolPath into account when deciding whether to recompile. Rebuild always.
-            a.Add(new Shaman.Runtime.ProcessUtils.RawCommandLineArgument("/t:Rebuild"));
-
-            if (detailed)
-                a.Add(new Shaman.Runtime.ProcessUtils.RawCommandLineArgument("/verbosity:detailed"));
-
-            if (projectNames != null) throw new ArgumentException("--project is not allowed when --internal-build-process is not used.");
-            a.Add(new Shaman.Runtime.ProcessUtils.RawCommandLineArgument("/p:CscToolPath=\"" + Path.GetDirectoryName(typeof(Program).GetTypeInfo().Assembly.Location) + "\""));
-
-                
-            RunMsbuild(a);
-              
-
-        }
+  
         
         private static void RunMsbuild(List<object> args)
         {
             var argsArray = args.ToArray();
-            var msbuildCandidates = new[] {
+
+            
+            var msbuildCandidates = new List<string>() {
+                @"%ProgramFiles(x86)%\Microsoft Visual Studio\Preview\Enterprise\MSBuild\15.0\Bin\amd64\MSBuild.exe",
+                @"%ProgramFiles(x86)%\Microsoft Visual Studio\Preview\Professional\MSBuild\15.0\Bin\amd64\MSBuild.exe",
+                @"%ProgramFiles(x86)%\Microsoft Visual Studio\Preview\Community\MSBuild\15.0\Bin\amd64\MSBuild.exe",
                 @"%ProgramFiles(x86)%\Microsoft Visual Studio\VS16\MSBuild\16.0\Bin\amd64\MSBuild.exe",
                 @"%ProgramFiles(x86)%\Microsoft Visual Studio\VS15\MSBuild\15.0\Bin\amd64\MSBuild.exe",
                 @"%ProgramFiles(x86)%\Microsoft Visual Studio\VS15Preview\MSBuild\15.0\Bin\amd64\MSBuild.exe",
@@ -412,6 +233,35 @@ Options for translation preview mode:
                 @"%ProgramFiles(x86)%\MSBuild\12.0\Bin\amd64\MSBuild.exe",
                 @"%SystemRoot%\Microsoft.NET\Framework64\v4.0.30319\MSBuild.exe",
             };
+
+            try
+            {
+                var key = Microsoft.Win32.Registry.LocalMachine.OpenSubKey(@"SOFTWARE\WOW6432Node\Microsoft\VisualStudio\SxS", false);
+                if (key != null)
+                {
+                    foreach (var subkey in key.GetSubKeyNames())
+                    {
+                        var z = key.OpenSubKey(subkey);
+                        var ids = z.GetValueNames();
+                        foreach (var id in ids)
+                        {
+                            var path = z.GetValue(id) as string;
+                            if (!string.IsNullOrEmpty(path))
+                            {
+                                msbuildCandidates.Add(Path.Combine(path, @"MSBuild\17.0\Bin\amd64\MSBuild.exe"));
+                                msbuildCandidates.Add(Path.Combine(path, @"MSBuild\16.0\Bin\amd64\MSBuild.exe"));
+                                msbuildCandidates.Add(Path.Combine(path, @"MSBuild\15.0\Bin\amd64\MSBuild.exe"));
+                            }
+                            
+                        }
+                    }
+                }
+            }
+            catch
+            {
+            }
+
+            
             try
             {
                 ProcessUtils.RunPassThrough("msbuild", argsArray);
