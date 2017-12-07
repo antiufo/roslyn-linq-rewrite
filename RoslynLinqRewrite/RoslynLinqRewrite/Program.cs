@@ -123,7 +123,15 @@ namespace Shaman.Roslyn.LinqRewrite
 
 
             a.AddRange(args);
-            RunMsbuild(a);
+            int exitcode = 0;
+            try
+            {
+                RunMsbuild(a);
+            }
+            catch (ProcessException ex)
+            {
+                exitcode = ex.ExitCode;
+            }
 
             Console.WriteLine();
             if (File.Exists(infofile))
@@ -136,7 +144,7 @@ namespace Shaman.Roslyn.LinqRewrite
             {
                 Console.WriteLine("Note: for consistency with MSBuild, this tool compiles by default in debug mode. Consider specifying /p:Configuration=Release.");
             }
-            return 0;
+            return exitcode;
             
 
 
