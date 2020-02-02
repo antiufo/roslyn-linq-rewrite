@@ -91,3 +91,4 @@ To further reduce allocations, install `Shaman.FastLinq` or `Shaman.FastLinq.Sou
 * No allocations for `Expression<>` trees and enumerator boxing
 * Parallel LINQ is not supported (i.e. left intact)
 * No support for F#
+
