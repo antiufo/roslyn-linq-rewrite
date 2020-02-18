@@ -80,13 +80,38 @@ namespace Shaman.Roslyn.LinqRewrite
             if (memberAccess != null)
             {
                 var symbol = semantic.GetSymbolInfo(memberAccess).Symbol as IMethodSymbol;
-                var owner = node.AncestorsAndSelf().FirstOrDefault(x => x is MethodDeclarationSyntax);
-                if (owner == null) return null;
-                currentMethodIsStatic = semantic.GetDeclaredSymbol((MethodDeclarationSyntax)owner).IsStatic;
-                currentMethodName = ((MethodDeclarationSyntax)owner).Identifier.ValueText;
-                currentMethodTypeParameters = ((MethodDeclarationSyntax)owner).TypeParameterList;
-                currentMethodConstraintClauses = ((MethodDeclarationSyntax)owner).ConstraintClauses;
+                var owner = node.AncestorsAndSelf().OfType<MethodDeclarationSyntax>().FirstOrDefault();
+                if (owner != null)
+                {
+                    currentMethodIsStatic = semantic.GetDeclaredSymbol(owner).IsStatic;
+                    currentMethodName = owner.Identifier.ValueText;
+                    currentMethodTypeParameters = owner.TypeParameterList;
+                    currentMethodConstraintClauses = owner.ConstraintClauses;
+                    
+                }
+                else
+                {
+                    var accessor = node.AncestorsAndSelf().OfType<AccessorDeclarationSyntax>().FirstOrDefault();
+                    if (accessor == null) return null;
+                    var parent = accessor.Parent?.Parent;
+                    if(parent == null) throw new NotSupportedException("Accessors must be in a property or event block");
+                    currentMethodIsStatic = semantic.GetDeclaredSymbol(parent).IsStatic;
+                    currentMethodTypeParameters = null;
+                    currentMethodConstraintClauses = new SyntaxList<TypeParameterConstraintClauseSyntax>();
 
+                    var property = parent as PropertyDeclarationSyntax;
+                    if (property != null)
+                    {
+                        currentMethodName = property.Identifier.ValueText;
+                    }
+                    else
+                    {
+                        var ev = parent as EventDeclarationSyntax;
+                        if (ev == null)
+                            throw new NotSupportedException("Accessors must be in properties or events. Not supported: " + parent);
+                        currentMethodName = ev.Identifier.ValueText;
+                    }
+                }
           
                 if (IsSupportedMethod(node))
                 {
@@ -295,6 +320,18 @@ namespace Shaman.Roslyn.LinqRewrite
             if (HasNoRewriteAttribute(node.AttributeLists)) return node;
             var old = RewrittenLinqQueries;
             var k = base.VisitMethodDeclaration(node);
+            if (RewrittenLinqQueries != old)
+            {
+                RewrittenMethods++;
+            }
+            return k;
+        }
+
+        public override SyntaxNode VisitAccessorDeclaration(AccessorDeclarationSyntax node)
+        {
+            if (HasNoRewriteAttribute(node.AttributeLists)) return node;
+            var old = RewrittenLinqQueries;
+            var k = base.VisitAccessorDeclaration(node);
             if (RewrittenLinqQueries != old)
             {
                 RewrittenMethods++;
